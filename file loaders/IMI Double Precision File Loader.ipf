@@ -4,6 +4,7 @@
 // IMI file loader
 //
 // added load folder, 6/21/13 pmv
+// added save file, 7/8/13 pmv
 
 // Add load SER menu item.
 Menu "Load Waves"
@@ -100,5 +101,61 @@ function LoadIMIFolder()
 		Rename imi_read $gfx_name
 		i+=1
 	while(1)
+	
+end
+
+// Save a 2D data set, like an image or a spectrum profile to a
+// Gatan fixed format .gfx file.
+function WriteIMI()
+
+	string w
+	Prompt w, "Select a 2D Wave", popup, WaveList("*", ";", "DIMS:2")
+	DoPrompt "Select a Wave", w
+	
+	if(V_flag)
+		return -1
+	endif
+	
+	wave dat = $w
+
+	variable fnum
+	Open/D/T=".dat" fnum
+	
+	if(!strlen(S_filename))
+		return -1
+	endif
+
+	WriteIMIWork(dat, S_filename)
+	
+end
+
+function WriteIMIWork(im, file)
+	wave im
+	string file
+	
+	variable fnum
+	Open/T=".dat" fnum as file
+	
+	if(!strlen(S_fileName))
+		return -1
+	endif
+	
+	fprintf fnum, "P9\r"
+	fprintf fnum, "#written from image %s by Igor Pro, %s\r", NameOfWave(im), date()
+	fprintf fnum, "%d %d\r", DimSize(im, 0), DimSize(im, 1)
+	
+	wavestats/Q im
+	fprintf fnum, "%d\r", round(V_max)
+	
+	if(wavetype(im) == 0x04)
+		FBinWrite/f=5 fnum, im
+	else
+		Duplicate/O im, imi_write_temp
+		Redimension/D imi_write_temp
+		FBinWrite/f=5 fnum, imi_write_temp
+		Killwaves imi_write_temp
+	endif
+	
+	Close fnum
 	
 end

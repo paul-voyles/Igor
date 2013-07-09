@@ -5,15 +5,24 @@
 //
 // added load folder, 6/21/13 pmv
 // added save file, 7/8/13 pmv
+// added save 3D image stack to separate files, 7/9/13 pmv
+// added save menu items, 7/9/13 pmv
 
-// Add load SER menu item.
+// Add load IMI menu item.
 Menu "Load Waves"
-		"Load IMI file . . .", ReadIMI()
-		help = {"Load an IMI .dat file."}
-		"Load folder of IMI files . . . ", LoadIMIFolder()
-		help = {"Load all the IMI .dat files in a the selected folder."}
+	"Load IMI file . . .", ReadIMI()
+	help = {"Load an IMI .dat file."}
+	"Load folder of IMI files . . . ", LoadIMIFolder()
+	help = {"Load all the IMI .dat files in a the selected folder."}
 end
 
+// Add save IMI menu items.
+Menu "Save Waves"
+	"Save IMI file . . .", WriteIMI()
+	help = {"Save a 2D wave to an IMI .dat file."}
+	"Save series to IMI files . . .", WriteIMIStack()
+	help = {"Save a 3D wave to a series of IMI .dat files."}
+end
 
 // Presents an open file dialog for the user to select a .dat file
 // that is then read into a wave of the appropriate type.
@@ -159,3 +168,52 @@ function WriteIMIWork(im, file)
 	Close fnum
 	
 end
+
+function WriteIMIStack()
+
+	string w
+	Prompt w, "Select a 3D Wave", popup, WaveList("*", ";", "DIMS:3")
+	DoPrompt "Select a Wave", w
+	
+	if(V_flag)
+		return -1
+	endif
+	
+	wave dat = $w
+
+	NewPath/O/M="Select a destination folder" dirpath
+	PathInfo dirpath
+	string dirname = S_Path
+	if(!strlen(dirname))
+		return 0
+	endif
+
+	Prompt w, "Enter the base output filename:"
+	DoPrompt "Enter base name", w
+
+	WriteIMIStackWork(dat, w, dirname)
+
+end
+
+function WriteIMIStackWork(im, base_file, fol)
+	wave im
+	string base_file, fol
+	
+	if(DimSize(im, 2) > 1000)
+		printf "Cannot currently export more than 1000 images at a time because I'm too lazy to program it.  Sorry.\r"
+		return -1
+	endif
+	
+	variable i
+	string file
+	for(i=0; i<DimSize(im, 2); i+=1)
+		sprintf file, "%s%s_%03d.dat", fol, base_file, i
+		ImageTransform/P=(i) getPlane im
+		wave one = $"M_ImagePlane"
+		WriteIMIWork(one, file)
+	endfor
+	
+	Killwaves M_ImagePlane
+	
+end
+	

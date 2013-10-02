@@ -13,7 +13,9 @@
 // 03-29-12 changed reassemble macro to read the number of pixels i nthe pacbed pattern
 //               from the data, not assume it.  Now autopacbed can set that flexibly and 
 //               reassemble will still work
-
+// 10-02-13 updated condor cmd file for current (2013) version of Condor.  Changed Image_size
+//               to Requested_memory, and upped it by 50% to prevent jobs from being kicked 
+//               off nodes for requesting too little memory.
 
 function MakeControlWaves()
 	
@@ -586,7 +588,7 @@ function StemChopCmd(target, sim_paths, directory, basename, comment, size, outn
 	
 		fprintf f, "#Job description\n"
 		fprintf f, "Executable = %s\n", sim_paths[2]
-		fprintf f, "Image_Size = %d Meg\n", size
+		fprintf f, "Request_memory = %d \n", 1.5*size
 		fprintf f, "\n"
 		
 		fprintf f, "#File locations\n"

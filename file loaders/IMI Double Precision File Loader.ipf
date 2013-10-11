@@ -7,6 +7,7 @@
 // added save file, 7/8/13 pmv
 // added save 3D image stack to separate files, 7/9/13 pmv
 // added save menu items, 7/9/13 pmv
+// fixed end-of-line \r vs \n bug 10/11/13 pmv
 
 // Add load IMI menu item.
 Menu "Load Waves"
@@ -149,12 +150,12 @@ function WriteIMIWork(im, file)
 		return -1
 	endif
 	
-	fprintf fnum, "P9\r"
-	fprintf fnum, "#written from image %s by Igor Pro, %s\r", NameOfWave(im), date()
-	fprintf fnum, "%d %d\r", DimSize(im, 0), DimSize(im, 1)
+	fprintf fnum, "P9\n"
+	fprintf fnum, "#written from image %s by Igor Pro, %s\n", NameOfWave(im), date()
+	fprintf fnum, "%d %d\n", DimSize(im, 0), DimSize(im, 1)
 	
 	wavestats/Q im
-	fprintf fnum, "%d\r", round(V_max)
+	fprintf fnum, "%d\n", round(V_max)
 	
 	if(wavetype(im) == 0x04)
 		FBinWrite/f=5 fnum, im

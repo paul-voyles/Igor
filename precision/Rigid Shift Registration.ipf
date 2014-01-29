@@ -5,19 +5,28 @@
 // v1 pmv 08-02-12
 //
 // Use PairwiseRigidShift
+//
+// 01-28-14 removed Imagetransform swap in TwoImageFindShift. no longer needed due to change in behavior of MatrixOp
+//               added Hanning window before MatrixOp correlation to reduce aliasing artifacts
 
 // f1 is reference, f2 is shift.  Reported shift works in imagetransform/trns
 // fit_win is NxN box to fit to cross correlation image to find shift with
 // sub-pixel accuracy.  max_shift is maximum allowed shift without an 
 // error - must be less than one unit cell.  (sx, sy) return the x and y shift
 // respectively, all in pixels.
-function TwoImageFindShift(f1, f2, fit_win, max_shift, sx, sy)
+function TwoImageFindShift(f1, f2, fit_win, max_shift, sx, sy, windowYN)
 	wave f1, f2
 	variable fit_win, max_shift
 	variable &sx, &sy
+	variable windowYN
+	
+	if(windowYN)
+		ImageWindow/O Bartlett f1
+		ImageWindow/O Bartlett f2
+	endif
 	
 	Matrixop/O cr = correlate(f1, f2, 0)
-	Imagetransform swap cr
+	// Imagetransform swap cr
 
 	wavestats/q/m=1 cr
 	
@@ -47,7 +56,7 @@ function ShiftTest(f1, f2, fit_win, max_shift)
 
 	variable sx, sy
 	
-	TwoImageFindShift(f1, f2, fit_win, max_shift, sx, sy)
+	TwoImageFindShift(f1, f2, fit_win, max_shift, sx, sy, 0)
 	
 	printf "Shift is (%g, %g) pixels.\r", sx, sy
 	
@@ -73,7 +82,7 @@ function GlobalRigidShift(st, ref, fit_win, max_shift)
 			Imagetransform/P=(i) getplane st
 			wave tmp = $"M_ImagePlane"
 			duplicate/O tmp shift_im
-			TwoImageFindShift(ref_im, shift_im, fit_win, max_shift, sx, sy)
+			TwoImageFindShift(ref_im, shift_im, fit_win, max_shift, sx, sy, 0)
 			ImageInterpolate/TRNS={scaleshift, sx, 1, sy, 1} resample shift_im
 			wave int_im = $"M_InterpolatedImage"
 			st_algn[][][i] = int_im[p][q]
@@ -88,9 +97,9 @@ end
 // st is the 3D image stack.  Ref is the reference image out of the stack that all the
 // other images are aligned to.  fit_win and max_shift are defined in TwoImageFindShift
 // currently there's a bug - this only works for ref = 0
-function PairwiseRigidShift(st, ref, fit_win, max_shift)
+function PairwiseRigidShift(st, ref, fit_win, max_shift, windowYN)
 	wave st
-	variable ref, fit_win, max_shift
+	variable ref, fit_win, max_shift, windowYN
 	
 	duplicate/O st, st_algn
 	
@@ -105,7 +114,7 @@ function PairwiseRigidShift(st, ref, fit_win, max_shift)
 		ImageTransform/p=(i) getplane st 
 		wave tmp = $"M_ImagePlane"
 		duplicate/O tmp f2
-		TwoImageFindShift(f1, f2, fit_win, max_shift, sxt, syt)
+		TwoImageFindShift(f1, f2, fit_win, max_shift, sxt, syt, windowYN)
 		sx[i] = sxt
 		sy[i] = syt
 	endfor
@@ -126,6 +135,6 @@ function PairwiseRigidShift(st, ref, fit_win, max_shift)
 		endif
 	endfor
 	
-	Killwaves f1, f2, M_ImagePlane, M_InterpolatedImage	
+	//Killwaves f1, f2, M_ImagePlane, M_InterpolatedImage	
 	
 end

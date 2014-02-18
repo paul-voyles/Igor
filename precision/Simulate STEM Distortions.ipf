@@ -4,6 +4,7 @@
 //
 // begun 01-20-2014, pmv
 //
+// Change ac_time wave to double precision, 02-17-14 pmv
 
 // input is the image to distort in im and the number of distorted frames to generate in
 // steps.  Input image calibration is used: distances and velocities are assumed to be in
@@ -16,14 +17,14 @@ function STEMDistortionStack(im, steps)
 	
 	// parameters describing the image series
 	variable nx = 256, ny = 256, npix = nx*ny
-	variable x0 = 10, y0 = 10
+	variable x0=19.52, y0=24.095
 	variable dwell = 16e-6 				// pixel dwell time in seconds
 	variable flyback = 60e-6 			// line flyback time in seconds
 	variable interframe = 1e-3 			// frame-to-frame delay time in seconds
 	variable dose_per_pixel = 5000		// incident electrons per pixel in each frame
 
 	// variables describing the distortions
-	variable slow_rand_f = 0.1  	// frequency (Hz) of random walk excuted by sample.
+	variable slow_rand_f = 0.05  	// frequency (Hz) of random walk excuted by sample.
 							  	// should have a period longer than the frame time
 	variable slow_rand_mag = 0.5 	// maximum magntidue of the random walk, in the distance units
 								// of the (calibrated) input image
@@ -208,7 +209,7 @@ end
 function AcTime(nx, ny, steps, dwell, flyback, interframe)
 	variable nx, ny, steps, dwell, flyback, interframe
 	
-	make/o/n=(nx*ny*steps) ac_time
+	make/d/o/n=(nx*ny*steps) ac_time
 	
 	ac_time = 0
 	variable i=1

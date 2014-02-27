@@ -5,6 +5,7 @@
 // begun 01-20-2014, pmv
 //
 // Change ac_time wave to double precision, 02-17-14 pmv
+// Fix standard deviation vs variance bug in FramePNoise 02-27-14 pmv
 
 // input is the image to distort in im and the number of distorted frames to generate in
 // steps.  Input image calibration is used: distances and velocities are assumed to be in
@@ -330,6 +331,6 @@ function FramePNoise(im, dose_per_pixel)
 	wave im
 	variable dose_per_pixel
 	
-	im = poissonNoise(sqrt(dose_per_pixel*im[p][q]))
+	im = poissonNoise(dose_per_pixel*im[p][q])
 	
 end

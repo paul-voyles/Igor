@@ -5,6 +5,7 @@
 
 #include <GizmoSlicer>
 
+// polar average over theta and phi to give just I(r) from I(x, y, z)
 function IsoAverage3D(dat, strip_width)
 	wave dat
 	variable strip_width
@@ -40,6 +41,7 @@ function IsoAverage3D(dat, strip_width)
 	Killwaves npix
 end
 
+// copies data from dat that falls inbetween radii rmin and rmax to output
 function RadiusChop(dat, rmin, rmax)
 	wave dat
 	variable rmin, rmax
@@ -69,6 +71,7 @@ function RadiusChop(dat, rmin, rmax)
 	
 end
 
+// makes as parametric wave for Gizmo containing the surface of a unit sphere
 Function makeSphere(pointsx,pointsy)
 	Variable pointsx,pointsy
 	
@@ -102,6 +105,8 @@ Function makeSphere(pointsx,pointsy)
 	endfor
 End
 
+// makes a color wave for Gizmo to display on a unit sphere colored by the data values in 
+// dat at radius r +/- thick.
 Function makeSphereColorWave(pointsx,pointsy,dat,radius,thick)
 	Variable pointsx,pointsy
 	wave dat
@@ -149,6 +154,7 @@ Function makeSphereColorWave(pointsx,pointsy,dat,radius,thick)
 	sphereColor[][][3] = 1
 
 End
+
 
 function VolumeSum(dat, radius, xc, yc, zc)
 	wave dat

@@ -6,6 +6,8 @@
 // added RDF, pmv 06-30-06
 // added PartialRDF, split RDF and RDFWork, pmv 06-07-06
 // added SaveCIF, ZtoSymbol, pmv 01-14-10
+// added SymboltoZ, RotModel90, and IsoBtoKirklandU, pmv 06-23-14
+
 
 function SetCell(xyz, ax, by, cz)
 	wave xyz
@@ -192,13 +194,8 @@ end
 function/S ZtoSymbol(znum)
 	variable znum
 	
-	make/o/n=(110)/t ZtoSymbol_work
-	ZtoSymbol_work[0,18] = {"no", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar"}
-	ZtoSymbol_work[19, 37] = {"K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb"}
-	ZtoSymbol_work[38, 57] = {"Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La"}
-	ZtoSymbol_work[58, 76] = {"Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os"}
-	ZtoSymbol_work[77,96] = {"Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm"}
-	ZtoSymbol_work[97,109] = {"Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt"}
+	MakeZSymList()
+	wave/T ZtoSymbol_work = $"ZtoSymbol_work"
 
 	string ret = ZtoSymbol_work[znum]
 	
@@ -207,6 +204,32 @@ function/S ZtoSymbol(znum)
 	return ret
 	
 end
+
+function SymboltoZ(sym)
+	string sym
+	
+	MakeZSymList()
+	wave/T ZtoSymbol_work = $"ZtoSymbol_work"
+	Make/o/n=109 SymtoZ_tmp
+	SymtoZ_tmp = (!cmpstr(sym, ZtoSymbol_work[p]) ? 1 : 0)
+	wavestats/q SymtoZ_tmp
+	Killwaves ZtoSymbol_work, SymtoZ_tmp
+	
+	return V_maxloc
+
+end	
+	
+function MakeZSymList()
+
+	make/o/n=(110)/t ZtoSymbol_work
+	ZtoSymbol_work[0,18] = {"no", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar"}
+	ZtoSymbol_work[19, 37] = {"K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb"}
+	ZtoSymbol_work[38, 57] = {"Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La"}
+	ZtoSymbol_work[58, 76] = {"Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os"}
+	ZtoSymbol_work[77,96] = {"Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm"}
+	ZtoSymbol_work[97,109] = {"Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt"}
+
+end	
 
 function SaveXYZNoSortZ(name, xyz)
 	string name
@@ -847,6 +870,55 @@ function Composition(xyz)
 	
 end
 	
+// Creates a model m_rot with the input model rotated 90 deg about the designated axis, then recentered at (1/2 1/2 1/2)	
+function RotModel90(m, axis)
+	wave m
+	variable axis
 	
+	duplicate/O m m_rot
+	duplicate/O m m_rot_tmp
 	
+	Recenter(m_rot_tmp, 0, 0, 0)
 	
+	switch(axis)
+	
+		case 1:  // rotation about x axis
+			m_rot[][1] = m_rot_tmp[p][1]
+			m_rot[][2] = m_rot_tmp[p][3]
+			m_rot[][3] = -1.0*m_rot_tmp[p][2]
+			SetCell(m_rot, GetAX(m), GetCZ(m), GetBY(m))		
+		break
+		
+		case 2: // rotation about y axis
+			m_rot[][1] = m_rot_tmp[p][3]
+			m_rot[][2] = m_rot_tmp[p][2]
+			m_rot[][3] = -1.0*m_rot_tmp[p][1]
+			SetCell(m_rot, GetCZ(m), GetBY(m), GetAX(m))		
+		break
+		
+		case 3: // rotation about z axis
+			m_rot[][1] = m_rot_tmp[p][2]
+			m_rot[][2] = -1.0*m_rot_tmp[p][1]
+			m_rot[][3] = m_rot_tmp[p][3]
+			SetCell(m_rot, GetBY(m), GetAX(m), GetCZ(m))		
+		break
+		
+		default:
+			printf "Error.  Axis must be 1, 2, or 3, current value %g\r", axis
+			killwaves m_rot, m_rot_tmp
+			return 0			
+	endswitch
+	
+	Recenter(m_rot, 0.5, 0.5, 0.5)
+	Killwaves m_rot_tmp
+	
+end
+	
+// translate temperature parameter B, in Angstrom^2 from CIF file (e.g. from ICSD) into 
+// rms displacement value in Angstrom needed by Kirkland multislice
+function IsoBtoKirklandU(B)
+	variable B
+	
+	return sqrt(B / (8*Pi^2))
+	
+end

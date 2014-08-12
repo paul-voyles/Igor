@@ -1,4 +1,5 @@
 #pragma rtGlobals=1		// Use modern global access method.
+#include "Image Analysis Utilities"
 //
 // Functions for pre-processing STEM image stacks
 //

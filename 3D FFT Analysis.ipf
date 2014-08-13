@@ -26,14 +26,21 @@
 //         This "fixing" is attempted automatically in a function called: try_automagic_spot_fix(ft, particles, particle_coefs, r, cut)  (set cut == 0 probably). However, be careful using this, I don't know if or how well it will even work.
 //     Hopefully now you have good fits for all your particles.
 
-//     Run create_output_wave(ft, particles, particle_coefs)  --- this generates "out" which is a modified version of "particles" for output
+//     Run create_output_wave(ft, particles, particle_coefs)  --- this generates "out" which is a modified version of "particles" for looking at
+//         It also creates "out_fortran" which is the out-wave you should pass to SaveParamfile for generating the 256 pixel IFT input parameters
 //         If you just want to regenerate the "out" wave for particle "r", then use create_output_particle(ft, particles, particle_coefs, r)
+//             This regenerates "out_fortran" as well.
 
 //     Change the spot name in the function SaveParamfile
-//     Run SaveParamfile(out)  --- this is the paramfile you will use for the IFT and post-IFT batch analysis
+//     Run SaveParamfile(out_fortran)  --- this is the paramfile you will use for the IFT and post-IFT batch analysis
 //     Change the modelfile in the paramfile you saved to the correct one
 
 //     Copy to ACI, run IFT by passing paramfile to slurm.sh (you may need to modify slurm.sh first, so take a look)
+
+//     Another great function is: AppendGvecsToVk(ft, out, kexp, vkexp) after you have done the above. In order to use this function you have
+//         to import the V(k) experimental data. I call the k wave "kexp" and the vk wave "vkexp". This plots the g-vectors you found above on
+//         top of V(k) along with error bars indicating the size of the spot. Now you can visually see where all your g-vecors are!
+//         You may want to change the function to only plot the top e.g. 20 spots (two lines, a make and a for loop).
 
 function IsoAverage3D(dat, strip_width)
 	wave dat
@@ -610,28 +617,30 @@ function create_output_particle(dat, particles, particle_coefs, r)
 	endif
 	
 	if( 1 == 1)
+	duplicate/o out, out_fortran
 	// Modify for generating paramfile if you are doing the final run.
 	// The issue is that we run the IFT with 256 pixels and not 512,
 	// so we have to 1/2 the x,y,z coordinates and the sigmas.
-	out[r][0] = round((offset_x + x_start_pix - x_start_pix_part + W_coef[6] - sqrt(2*ln(10))*W_coef[0])/2)+1
-	out[r][1] = round((offset_x + x_start_pix-x_start_pix_part+W_coef[6] + sqrt(2*ln(10))*W_coef[0])/2)+1
-	out[r][2] = round((offset_y + y_start_pix-y_start_pix_part+W_coef[7] - sqrt(2*ln(10))*W_coef[1])/2)+1
-	out[r][3] = round((offset_y + y_start_pix-y_start_pix_part+W_coef[7] + sqrt(2*ln(10))*W_coef[1])/2)+1
-	out[r][4] = round((offset_z + z_start_pix-z_start_pix_part+W_coef[8] - sqrt(2*ln(10))*W_coef[2])/2)+1
-	out[r][5] = round((offset_z + z_start_pix-z_start_pix_part+W_coef[8] + sqrt(2*ln(10))*W_coef[2])/2)+1
-	out[r][7] = round((x_start_pix - x_start_pix_part + W_coef[6]))//2)
-	out[r][8] = round((y_start_pix - y_start_pix_part + W_coef[7]))//2)
-	out[r][9] = round((z_start_pix - z_start_pix_part + W_coef[8]))//2)
-	out[r][11] = W_coef[0]/2 //sx
-	out[r][12] = W_coef[1]/2
-	out[r][13] = W_coef[2]/2
-	out[r][14] = W_coef[3] //cxy
-	out[r][15] = W_coef[4]
-	out[r][16] = W_coef[5]
-	out[r][17] = (x_start_pix-x_start_pix_part+W_coef[6])/2+1 //x0
-	out[r][18] = (y_start_pix-y_start_pix_part+W_coef[7])/2+1
-	out[r][19] = (z_start_pix-z_start_pix_part+W_coef[8])/2+1
+	out_fortran[r][0] = round((offset_x + x_start_pix - x_start_pix_part + W_coef[6] - sqrt(2*ln(10))*W_coef[0])/2)+1
+	out_fortran[r][1] = round((offset_x + x_start_pix-x_start_pix_part+W_coef[6] + sqrt(2*ln(10))*W_coef[0])/2)+1
+	out_fortran[r][2] = round((offset_y + y_start_pix-y_start_pix_part+W_coef[7] - sqrt(2*ln(10))*W_coef[1])/2)+1
+	out_fortran[r][3] = round((offset_y + y_start_pix-y_start_pix_part+W_coef[7] + sqrt(2*ln(10))*W_coef[1])/2)+1
+	out_fortran[r][4] = round((offset_z + z_start_pix-z_start_pix_part+W_coef[8] - sqrt(2*ln(10))*W_coef[2])/2)+1
+	out_fortran[r][5] = round((offset_z + z_start_pix-z_start_pix_part+W_coef[8] + sqrt(2*ln(10))*W_coef[2])/2)+1
+	out_fortran[r][7] = round((x_start_pix - x_start_pix_part + W_coef[6]))//2)
+	out_fortran[r][8] = round((y_start_pix - y_start_pix_part + W_coef[7]))//2)
+	out_fortran[r][9] = round((z_start_pix - z_start_pix_part + W_coef[8]))//2)
+	out_fortran[r][11] = W_coef[0]/2 //sx
+	out_fortran[r][12] = W_coef[1]/2
+	out_fortran[r][13] = W_coef[2]/2
+	out_fortran[r][14] = W_coef[3] //cxy
+	out_fortran[r][15] = W_coef[4]
+	out_fortran[r][16] = W_coef[5]
+	out_fortran[r][17] = (x_start_pix-x_start_pix_part+W_coef[6])/2+1 //x0
+	out_fortran[r][18] = (y_start_pix-y_start_pix_part+W_coef[7])/2+1
+	out_fortran[r][19] = (z_start_pix-z_start_pix_part+W_coef[8])/2+1
 	else
+	// this changes W_coef to be the windowing function instead of the fit
 	W_coef[6] = out[r][17]
 	W_coef[7] = out[r][18]
 	W_coef[8] = out[r][19]
@@ -1236,4 +1245,60 @@ function MaskFromXYZMinMax(dim1,dim2,dim3,xyzminmax)
 			endfor
 		endfor
 	endfor
+end
+
+function AppendGvecsToVk(ft, out, kexp, vkexp)
+	wave ft, out, kexp, vkexp
+	// You must run FindSpots(ft,15) first
+	// Run the full fits on all the spots too to generate "out" but make sure that the 512 pixel version is saved not the 256
+	
+	setscale/P x,kexp[0],kexp[1]-kexp[0],vkexp
+	make/o/n=(dimsize(out,0)) gvecs, gvecs_id, gvecs_size
+	//make/o/n=(20) gvecs, gvecs_id, gvecs_size
+	gvecs_id = p
+	// if you generated "out" use the better below line, otherwise approximate with the one after
+	gvecs_size = sqrt( out[p][11]^2 + out[p][12]^2 + out[p][13]^2 )/2  // use sigmas to get gvec size
+	//gvecs_size = (out[p][1]-out[p][0])/2
+	gvecs_size*=dimdelta(ft,0)
+	variable rr, i
+	// if you generated "out" use the below loop, otherwise just comment it
+	for(rr=0; rr<dimsize(out,0); rr+=1)
+		out[rr][10] = sqrt( (dimsize(ft,0)/2-out[rr][17])^2 + (dimsize(ft,1)/2-out[rr][18])^2 + (dimsize(ft,2)/2-out[rr][19])^2 )*dimdelta(ft,0)
+	endfor
+	gvecs = out[p][10]
+	duplicate/o gvecs, gvecs_y
+	setscale/P x,kexp[0],kexp[1]-kexp[0],vkexp
+	variable x1, x2
+	for(rr=0; rr<dimsize(out,0); rr+=1)
+	//for(rr=0; rr<20; rr+=1)
+		for(i=0; i<dimsize(kexp,0); i+=1)
+			if( kexp[i] > gvecs[rr] )
+				x1 = i - 1
+				x2 = i
+				//print rr, x1,x2, kexp[x1],kexp[x2], vkexp[x1],vkexp[x2], gvecs[rr]
+				break
+			endif
+		endfor
+		// if you generated "out" use the better below line, otherwise approximate with the one after
+		gvecs_y[rr] = linearInterp(kexp[x1],vkexp[x1],kexp[x2],vkexp[x2],gvecs[rr])
+		//gvecs_y[rr] = vkexp[x2pnt(vkexp,gvecs[rr])]
+		//print gvecs_y[rr]
+	endfor
+	Sort gvecs gvecs_y,gvecs,gvecs_id,gvecs_size
+	Display  root:vkexp
+	AppendToGraph gvecs_y vs gvecs
+	ModifyGraph mode(gvecs_y)=3,marker(gvecs_y)=19,msize(gvecs_y)=1.5;DelayUpdate
+	ModifyGraph rgb(gvecs_y)=(0,0,0)
+	Legend/C/N=text0/J/F=0/A=MC "\\s(vkexp) V(k) experimental\r\\s(gvecs_y) These represent |g|\rfor various g-vectors. The\ry-axis has been scaled to";DelayUpdate
+	AppendText "match V(k), the x-positions\rare |g|."
+	Legend/C/N=text0/J "\\s(vkexp) V(k) experimental\r\\s(gvecs_y) These represent |g|\rfor various g-vectors found in\rthe FT. The y-axis has been ";DelayUpdate
+	AppendText/N=text0 "scaled to match V(k), the x-\rpositions are |g|."
+	ErrorBars gvecs_y X,wave=(gvecs_size,gvecs_size)
+end
+
+function linearInterp(x1,y1,x2,y2,x0)
+	variable x1,x2,y1,y2,x0
+	//print (y2-y1)/(x2-x1)*(x0-x1)+y1
+	//print (y2-y1)/(x2-x1)*(x0-x2)+y2
+	return (y2-y1)/(x2-x1)*(x0-x1)+y1
 end

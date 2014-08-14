@@ -42,6 +42,10 @@
 //         top of V(k) along with error bars indicating the size of the spot. Now you can visually see where all your g-vecors are!
 //         You may want to change the function to only plot the top e.g. 20 spots (two lines, a make and a for loop).
 
+//FindSpots(ft,15)
+//gauss_fit_particles(ft, particles)
+//create_output_wave(ft, particles, particle_coefs)
+
 function IsoAverage3D(dat, strip_width)
 	wave dat
 	variable strip_width
@@ -519,19 +523,20 @@ function create_output_wave(dat, particles, particle_coefs)
 	wave W_coef = $"W_coef"
 	variable r, i, j, k
 	make/o/n=(dimsize(particles,0),dimsize(particles,1)+9) out
+	duplicate/o out, out_fortran
 	variable x_start_pix, y_start_pix, z_start_pix, found, x_start_pix_part, y_start_pix_part, z_start_pix_part
 	variable offset_x, offset_y, offset_z
 	for( r=0; r<dimsize(particles,0); r+=1)
-		create_output_particle(dat, particles, particle_coefs, r)
+		create_output_particle(dat, particles, particle_coefs, r, out, out_fortran)
 	endfor
 end
 
-function create_output_particle(dat, particles, particle_coefs, r)
-	wave dat, particles, particle_coefs
+function create_output_particle(dat, particles, particle_coefs, r, out, out_fortran)
+	wave dat, particles, particle_coefs, out, out_fortran
 	variable r
 	wave W_coef = $"W_coef"
 	variable i, j, k
-	make/o/n=(dimsize(particles,0),dimsize(particles,1)+9) out
+	//make/o/n=(dimsize(particles,0),dimsize(particles,1)+9) out
 	variable x_start_pix, y_start_pix, z_start_pix, found, x_start_pix_part, y_start_pix_part, z_start_pix_part
 	variable offset_x, offset_y, offset_z
 	// Locate max intensity in particle so I can match it to the position in dat
@@ -617,7 +622,9 @@ function create_output_particle(dat, particles, particle_coefs, r)
 	endif
 	
 	if( 1 == 1)
-	duplicate/o out, out_fortran
+	for( i=0; i<dimsize(out,1); i+=1)
+		out_fortran[r][i] = out[r][i]
+	endfor
 	// Modify for generating paramfile if you are doing the final run.
 	// The issue is that we run the IFT with 256 pixels and not 512,
 	// so we have to 1/2 the x,y,z coordinates and the sigmas.
@@ -639,6 +646,7 @@ function create_output_particle(dat, particles, particle_coefs, r)
 	out_fortran[r][17] = (x_start_pix-x_start_pix_part+W_coef[6])/2+1 //x0
 	out_fortran[r][18] = (y_start_pix-y_start_pix_part+W_coef[7])/2+1
 	out_fortran[r][19] = (z_start_pix-z_start_pix_part+W_coef[8])/2+1
+	print out_fortran[r]
 	else
 	// this changes W_coef to be the windowing function instead of the fit
 	W_coef[6] = out[r][17]
@@ -782,32 +790,32 @@ function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas)
 	return res_sum
 end
 
-function SaveParamfile(out)
-	wave out
+function SaveParamfile(out_fortran)
+	wave out_fortran
 	// Particles wave should be output from FindSpots
 	// columns 0-5 are the xmin, xmax, ymin, ymax, zmin, zmax
 	// column 6 is the intensity of the brightest pixel, whose coordinates
 	// are stored in columns 7-9. Column 10 is irrelevant.
-	Make/O/N=(DimSize(out, 0)) xmin, ymin, zmin, xmax, ymax, zmax, xc, yc, zc, gvecs, x0, y0, z0, sx, sy, sz, cxy, cxz, cyz
-	xmin = out[p][0]
-	xmax = out[p][1]
-	ymin = out[p][2]
-	ymax = out[p][3]
-	zmin = out[p][4]
-	zmax = out[p][5]
-	xc = out[p][7]
-	yc = out[p][8]
-	zc = out[p][9]
-	gvecs = out[p][10]
-	sx = out[p][11]
-	sy = out[p][12]
-	sz = out[p][13]
-	cxy = out[p][14]
-	cxz = out[p][15]
-	cyz = out[p][16]
-	x0 = out[p][17]
-	y0 = out[p][18]
-	z0 = out[p][19]
+	Make/O/N=(DimSize(out_fortran, 0)) xmin, ymin, zmin, xmax, ymax, zmax, xc, yc, zc, gvecs, x0, y0, z0, sx, sy, sz, cxy, cxz, cyz
+	xmin = out_fortran[p][0]
+	xmax = out_fortran[p][1]
+	ymin = out_fortran[p][2]
+	ymax = out_fortran[p][3]
+	zmin = out_fortran[p][4]
+	zmax = out_fortran[p][5]
+	xc = out_fortran[p][7]
+	yc = out_fortran[p][8]
+	zc = out_fortran[p][9]
+	gvecs = out_fortran[p][10]
+	sx = out_fortran[p][11]
+	sy = out_fortran[p][12]
+	sz = out_fortran[p][13]
+	cxy = out_fortran[p][14]
+	cxz = out_fortran[p][15]
+	cyz = out_fortran[p][16]
+	x0 = out_fortran[p][17]
+	y0 = out_fortran[p][18]
+	z0 = out_fortran[p][19]
 	
 	variable i, f
 	Open/T=".txt" f
@@ -817,8 +825,8 @@ function SaveParamfile(out)
 	endif
 	
 	fprintf f, "%s\n", "model-filename goes here"
-	fprintf f, "%g\n", min(20,DimSize(out,0))
-	for( i=0; i<DimSize(out,0); i+=1)   // Save all the particles, but only set Fortran to calculate the first 20
+	fprintf f, "%g\n", min(20,DimSize(out_fortran,0))
+	for( i=0; i<DimSize(out_fortran,0); i+=1)   // Save all the particles, but only set Fortran to calculate the first 20
 		fprintf f, "t3_gauss_spot%g_\n", i
 		fprintf f, "%g %g %g\n", x0[i], y0[i], z0[i]
 		fprintf f, "%g %g %g\n", sx[i], sy[i], sz[i]
@@ -1139,6 +1147,8 @@ function try_automagic_spot_fix(dat, particles, particle_coefs, r, cut)
 	wave dat, particles, particle_coefs
 	variable cut
 	variable r
+	wave out = $"out"
+	wave out_fortran = $"out_fortran"
 	ShowXYZLineProfile(dat, particles, r, cut)
 	wave W_coef, coefx, coefy, coefz
 	W_coef[0] = coefx[3]
@@ -1146,7 +1156,7 @@ function try_automagic_spot_fix(dat, particles, particle_coefs, r, cut)
 	W_coef[2] = coefz[3]
 	print W_coef
 	regenerateSpotParameters(dat, r, particles, particle_coefs, W_coef)
-	create_output_particle(dat, particles, particle_coefs, r)
+	create_output_particle(dat, particles, particle_coefs, r, out, out_fortran)
 end
 
 // This function creates 3 waves in the x y and z directions that
@@ -1301,4 +1311,21 @@ function linearInterp(x1,y1,x2,y2,x0)
 	//print (y2-y1)/(x2-x1)*(x0-x1)+y1
 	//print (y2-y1)/(x2-x1)*(x0-x2)+y2
 	return (y2-y1)/(x2-x1)*(x0-x1)+y1
+end
+
+function cut_ft_smaller_for_isosurface(ft)
+	wave ft
+	make/o/n=(256,256,256) ft_iso
+	variable i,j,k
+	
+	for(i=128; i<256+128; i+=1)
+		printf "%g\r", i-128
+		for(j=128; j<256+128; j+=1)
+			//printf "  %g\r", j-128
+			for(k=128; k<256+128; k+=1)
+				//printf "    %g\r", k
+				ft_iso[i-128][j-128][k-128] = ft[i][j][k]
+			endfor
+		endfor
+	endfor
 end

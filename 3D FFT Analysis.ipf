@@ -23,7 +23,9 @@
 //         The best way to "fix" them so far (imo) is to run ShowXYZLineProfile(ft, particles, r, 0) where "r" is the spot you want to fix. This creates three graphs, one for each x,y,z direction.
 //         You can take the gaussian sigmas (widths) and manually type them into the W_coef wave. Then regenerate the particle fit with these sigmas (modify them if you don't like the
 //         x,y, or z fit widths by the way) by running regenerateSpotParameters(ft, r, particles, particle_coefs, W_coef).
-//         This "fixing" is attempted automatically in a function called: try_automagic_spot_fix(ft, particles, particle_coefs, r, cut)  (set cut == 0 probably). However, be careful using this, I don't know if or how well it will even work.
+//         This "fixing" is attempted automatically in a function called: try_automagic_spot_fix(ft, particles, particle_coefs, r, cut)  (set cut == 0 first). However, be careful using this, I don't know if or how well it will even work.
+//         To undo the "fixing" run:  gauss_fit_particle(ft, particles, r, particle_coefs, 0, 0)   and   create_output_particle(ft, particles, particle_coefs, r, out, out_fortran)
+//	     You can also try to 
 //     Hopefully now you have good fits for all your particles.
 
 //     Run create_output_wave(ft, particles, particle_coefs)  --- this generates "out" which is a modified version of "particles" for looking at
@@ -42,9 +44,18 @@
 //         top of V(k) along with error bars indicating the size of the spot. Now you can visually see where all your g-vecors are!
 //         You may want to change the function to only plot the top e.g. 20 spots (two lines, a make and a for loop).
 
-//FindSpots(ft,15)
-//gauss_fit_particles(ft, particles)
-//create_output_wave(ft, particles, particle_coefs)
+// FindSpots(ft,15)
+// gauss_fit_particles(ft, particles)
+// There is currently some bug so run this next:  gauss_fit_particle(ft, particles, 0, particle_coefs, 0, 0)
+// create_output_wave(ft, particles, particle_coefs)
+// search_for_multiple_spots(ft, particles, particle_coefs, out, out_fortran) // searches for potential window'd images that may have multiple g-vectors in them. Be careful, this erases any hand made modifications you have made!
+// create_output_wave(ft, particles, particle_coefs)
+
+// window_edge_checking(out)
+// cut_ft_smaller_for_isosurface(ft)
+// create_windowed_spots(ft, out, rr)
+// create_unwindowed_spots(ft, out, rr)
+// AppendGvecsToVk(ft, out, kexp, vkexp)
 
 function IsoAverage3D(dat, strip_width)
 	wave dat
@@ -421,18 +432,33 @@ function FindSpots(dat, numstdevs)
 			particles[i/2][j] = deleteme[i][j]
 		endfor
 	endfor
+	
+	make/o/n=(dimsize(particles,0)) spot_intensities
+	spot_intensities = particles[p][6]
+	make/o/n=(dimsize(particles,0)) gvecs_unsorted
+	gvecs_unsorted = particles[p][10]
+	Display  spot_intensities vs gvecs_unsorted
+	ModifyGraph mode=3,marker=2,rgb=(0,0,0)
+	Display  spot_intensities
+	ModifyGraph mode=3,marker=2,rgb=(0,0,0)
+	
 	killwaves deleteme
-	//killwaves dat2, background, spots // Comment this line if you want to know more about what's going on.
+	killwaves dat2, background, spots // Comment this line if you want to know more about what's going on.
 	return 0
 end
 
-function gauss_fit_particle(dat, particles, r, particle_coefs, hold)
-	// set hold to 0 or 1
-	// hold == 0 means to not hold the sigmas in the fit
-	// hold == 1 means to hold the sigmas in the fit
-	// use hold == 1 when you are trying to fix a spot's fitted sigmas manually
+function gauss_fit_particle(dat, particles, r, particle_coefs, hold_sigmas, hold_centers)
+	// set hold_sigmas to 0 or 1
+	// hold_sigmas == 0 means to not hold the sigmas in the fit
+	// hold_sigmas == 1 means to hold the sigmas in the fit
+	// use hold_sigmas == 1 when you are trying to fix a spot's fitted sigmas manually
+	
+	// set hold_centers to 0 or 1
+	// hold_centers == 0 means to not hold the center positions in the fit
+	// hold_centers == 1 means to hold the center positions in the fit
+	// use hold_centers == 1 when you are trying to fix a spot's fitted center positions manually
 	wave dat, particles, particle_coefs
-	variable r, hold
+	variable r, hold_sigmas, hold_centers
 	variable i, j, k
 	variable xwn, ywn, zwn
 	wave W_coef,image,image_fit
@@ -441,7 +467,7 @@ function gauss_fit_particle(dat, particles, r, particle_coefs, hold)
 	best_res_sum = 99999999.0
 	for( i=1; i<=3; i+=1)
 		//printf "Running 3D gauss fit on particle %g with extra=%g\r",r,i
-		res_sum = fitSpotTo3DGauss(dat, particles, r, i, hold) //0 means do not hold sigmas
+		res_sum = fitSpotTo3DGauss(dat, particles, r, i, hold_sigmas, hold_centers) //0 means do not hold sigmas
 		xwn = round(sqrt(2*ln(10))*W_coef[0])
 		ywn = round(sqrt(2*ln(10))*W_coef[1])
 		zwn = round(sqrt(2*ln(10))*W_coef[2])
@@ -451,12 +477,13 @@ function gauss_fit_particle(dat, particles, r, particle_coefs, hold)
 		endif
 	endfor
 	if( best_i != 3)
-		res_sum = fitSpotTo3DGauss(dat, particles, r, best_i, hold)
+		res_sum = fitSpotTo3DGauss(dat, particles, r, best_i, hold_sigmas, hold_centers)
 	endif
 	xwn = round(sqrt(2*ln(10))*W_coef[0])
 	ywn = round(sqrt(2*ln(10))*W_coef[1])
 	zwn = round(sqrt(2*ln(10))*W_coef[2])
-	printf "Particle %g's best extra fit = %g with a  res_sum = %g\r", r, best_i, best_res_sum
+	variable V_chisq
+	printf "Particle %g's best extra fit = %g with a  res_sum = %g and chisq = %g\r", r, best_i, best_res_sum, V_chisq
 	//printf "Widths: %g %g %g\r", xwn, ywn, zwn
 	//print W_coef
 	make/o/n=(xwn*2,ywn*2) image_layer
@@ -506,14 +533,15 @@ function gauss_fit_particles(dat, particles)
 	make/o/n=(dimsize(particles,0), 12) particle_coefs
 	
 	for( r=0; r<dimsize(particles,0); r+=1)
-		gauss_fit_particle(dat, particles, r, particle_coefs, 0)
+		gauss_fit_particle(dat, particles, r, particle_coefs, 0, 0)
 	endfor
 end
 
 function regenerateSpotParameters(dat, r, particles, particle_coefs, W_coef)
+	// W_coef is used in gauss_fit_particle in this case
 	variable r
 	wave dat, particle_coefs, W_coef, particles
-	gauss_fit_particle(dat, particles, r, particle_coefs, 1) // set hold == 1 so that the sigmas are held constant
+	gauss_fit_particle(dat, particles, r, particle_coefs, 1, 0) // set hold == 1 so that the sigmas are held constant, but don't hold centers constant
 end
 
 function create_output_wave(dat, particles, particle_coefs)
@@ -567,10 +595,10 @@ function create_output_particle(dat, particles, particle_coefs, r, out, out_fort
 	// First, increase the sigmas of the fit by 1.5 or 2 or something so that the fit becomes
 	// a windowing function instead. What you multiply by determines how big the final spot is.
 	W_coef[] = particle_coefs[r][p]
-	print W_coef
-	W_coef[0] *= 1.5
-	W_coef[1] *= 1.5
-	W_coef[2] *= 1.5
+	//print W_coef
+	W_coef[0] *= 1.3
+	W_coef[1] *= 1.3
+	W_coef[2] *= 1.3
 	/// Now we know where the maximum intensity of the spot is in both the data and in the particle (i.e. "image")
 	// So now we need to correct for where the gaussian fit found the center
 	// which is stored in W_coef [6] to [8]
@@ -646,7 +674,6 @@ function create_output_particle(dat, particles, particle_coefs, r, out, out_fort
 	out_fortran[r][17] = (x_start_pix-x_start_pix_part+W_coef[6])/2+1 //x0
 	out_fortran[r][18] = (y_start_pix-y_start_pix_part+W_coef[7])/2+1
 	out_fortran[r][19] = (z_start_pix-z_start_pix_part+W_coef[8])/2+1
-	print out_fortran[r]
 	else
 	// this changes W_coef to be the windowing function instead of the fit
 	W_coef[6] = out[r][17]
@@ -655,48 +682,99 @@ function create_output_particle(dat, particles, particle_coefs, r, out, out_fort
 	endif
 end
 
-function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas)
+function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas, hold_centers)
+	// If you use either holds, the wave W_coef must be set for sigmas or centers outside this function
 	// Does a fit on particle r
 	// extra specifies the extra amount you multiply the initial fit window by to get a better window (it multiplies)
 	// Updated variables include:  temp, temp_fit, residuals, and gauss_fit
 	// image_layer and image_layer_fit are NOT updated here (they are updated/made in the iterating gauss fit function over all particles)
 	wave dat, particles
-	variable r, extra, hold_sigmas
+	variable r, extra, hold_sigmas, hold_centers
 	variable sx,sy,sz
 	
 	// Set up first fit based on the inputs
 	variable xw, yw, zw
 	variable print_true = 0
 	variable i,j,k
-	xw = particles[r][1]-particles[r][0]
+	if(hold_sigmas == 0 && hold_centers == 0) // no holding
+		Make/D/N=9/O W_coef
+	else
+		wave W_coef = $"W_coef"
+	endif
+	variable x0,y0,z0
+	//if(hold_centers != 0)  // holding centers
+	//	//wave W_coef = $"W_coef"
+	//	x0 = W_coef[6]
+	//	y0 = W_coef[7]
+	//	z0 = W_coef[8]
+	//endif
+	xw = particles[r][1]-particles[r][0] // right edge - left edge = width
 	yw = particles[r][3]-particles[r][2]
 	zw = particles[r][5]-particles[r][4]
-	if(hold_sigmas == 0)
-		Make/D/N=9/O W_coef
-		W_coef[0] = {xw/2, yw/2, zw/2, 0.1, 0.1, 0.1, xw, yw, zw}
+	x0 = particles[r][7]-particles[r][0] - (xw/2 - xw*extra/2) // center - left edge + extra addon width = new center
+	y0 = particles[r][8]-particles[r][2] - (yw/2 - yw*extra/2)
+	z0 = particles[r][9]-particles[r][4] - (zw/2 - zw*extra/2)
+	variable xcl, xcr, ycl, ycr, zcl, zcr
+	xcl = x0 - (particles[r][7] - particles[r][0])/2  // the center should stay within the original spot region found by ImageAnalyzeParticles
+	xcr = x0 + (particles[r][7] - particles[r][0])/2
+	ycl = y0 - (particles[r][8] - particles[r][2])/2
+	ycr = y0 + (particles[r][8] - particles[r][2])/2
+	zcl = z0 - (particles[r][9] - particles[r][4])/2  // the center should stay within the original spot region found by ImageAnalyzeParticles
+	zcr = z0 + (particles[r][9] - particles[r][4])/2
+	//printf( " %g %g %g\r" ) (xw/2 - xw*extra/2), (yw/2 - yw*extra/2), (zw/2 - zw*extra/2)
+	//printf( " %g %g %g\r" ) x0, y0, z0
+	//printf( " %g %g %g %g %g %g\r\r" ) xcl, xcr, ycl, ycr, zcl, zcr
+	if(hold_sigmas == 0) // no holding
+		//Make/D/N=9/O W_coef
+		W_coef[0] = {xw/2, yw/2, zw/2, 0.1, 0.1, 0.1, xw*extra/2, yw*extra/2, zw*extra/2}
 		Make/O/T/N=18 T_Constraints
 		T_Constraints = {"K0 > 0","K0 < 32","K1 > 0","K1 < 30","K2 > 0","K2 < 24","K3 > -.5","K3 < .5","K4 > -.5","K4 < .5","K5 > -.5","K5 < .5","K6 > 0","K6 < 32","K7 > 0","K7 < 30","K8 > 0","K8 < 24"}
 		T_Constraints[1]   = "K0 < " + num2str(xw*extra)
 		T_Constraints[3]   = "K1 < " + num2str(yw*extra)
 		T_Constraints[5]   = "K2 < " + num2str(zw*extra)
-		T_Constraints[13] = "K6 < " + num2str(xw*extra)
-		T_Constraints[15] = "K7 < " + num2str(yw*extra)
-		T_Constraints[17] = "K8 < " + num2str(zw*extra)
-	else
-		wave W_coef = $"W_coef"
+		//T_Constraints[13] = "K6 < " + num2str(xw*extra)
+		//T_Constraints[15] = "K7 < " + num2str(yw*extra)
+		//T_Constraints[17] = "K8 < " + num2str(zw*extra)
+		T_Constraints[12] = "K6 > " + num2str( xcl ) // centers, which should not deviate from the original spot region found in ImageAnalyzeParticles
+		T_Constraints[13] = "K6 < " + num2str( xcr )
+		T_Constraints[14] = "K7 > " + num2str( ycl )
+		T_Constraints[15] = "K7 < " + num2str( ycr )
+		T_Constraints[16] = "K8 > " + num2str( zcl )
+		T_Constraints[17] = "K8 < " + num2str( zcr )
+	else // holding sigmas
+		//wave W_coef = $"W_coef"
 		sx = W_coef[0]
 		sy = W_coef[1]
 		sz = W_coef[2]
-		W_coef[0] = {xw/2, yw/2, zw/2, 0.1, 0.1, 0.1, xw, yw, zw}
+		W_coef[0] = {xw/2, yw/2, zw/2, 0.1, 0.1, 0.1, xw*extra/2, yw*extra/2, zw*extra/2}
 		W_coef[0] = sx
 		W_coef[1] = sy
 		W_coef[2] = sz
 		printf "Using sigmas for fit: %g %g %g\r", W_coef[0], W_coef[1], W_coef[2]
 		Make/O/T/N=12 T_Constraints
 		T_Constraints = {"K3 > -.5","K3 < .5","K4 > -.5","K4 < .5","K5 > -.5","K5 < .5","K6 > 0","K6 < 32","K7 > 0","K7 < 30","K8 > 0","K8 < 24"}
-		T_Constraints[7] = "K6 < " + num2str(xw*extra)
-		T_Constraints[9] = "K7 < " + num2str(yw*extra)
-		T_Constraints[11] = "K8 < " + num2str(zw*extra)
+		//T_Constraints[7] = "K6 < " + num2str(xw*extra)
+		//T_Constraints[9] = "K7 < " + num2str(yw*extra)
+		//T_Constraints[11] = "K8 < " + num2str(zw*extra)
+		T_Constraints[6] = "K6 > " + num2str( xcl ) // centers, which should not deviate from the max intensity point by more than 1/4 of the window size
+		T_Constraints[7] = "K6 < " + num2str( xcr )
+		T_Constraints[8] = "K7 > " + num2str( ycl )
+		T_Constraints[9] = "K7 < " + num2str( ycr )
+		T_Constraints[10] = "K8 > " + num2str( zcl )
+		T_Constraints[11] = "K8 < " + num2str( zcr )
+	endif
+	
+	if(hold_centers != 0)  // holding centers
+		//wave W_coef = $"W_coef"
+		W_coef[6] = x0
+		W_coef[7] = y0
+		W_coef[8] = z0
+		printf "Using center positions from particles for fit: %g %g %g\r", W_coef[6], W_coef[7], W_coef[8]
+		Make/O/T/N=12 T_Constraints
+		T_Constraints = {"K0 > 0","K0 < 32","K1 > 0","K1 < 30","K2 > 0","K2 < 24","K3 > -.5","K3 < .5","K4 > -.5","K4 < .5","K5 > -.5","K5 < .5"}
+		T_Constraints[1]   = "K0 < " + num2str(xw*extra)
+		T_Constraints[3]   = "K1 < " + num2str(yw*extra)
+		T_Constraints[5]   = "K2 < " + num2str(zw*extra)
 	endif
 
 	// Create the image to fit
@@ -708,13 +786,15 @@ function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas)
 			endfor
 		endfor
 	endfor
-	variable wm = wavemax(image)
+	variable wm = particles[r][6]
 	image /= wm // Need to normalize to 1 because there is no intensity in the gauss3df function.
 	// Do the fit
 	duplicate/o image,image_fit
 	image_fit = NaN
 	if(hold_sigmas == 0) // 0 means false, 1 means true
 		FuncFitMD/Q/H="000000000"/NTHR=0 gauss3df W_coef  image /D=image_fit /C=T_Constraints
+	elseif(hold_centers != 0)
+		FuncFitMD/Q/H="000000111"/NTHR=0 gauss3df W_coef  image /D=image_fit /C=T_Constraints
 	else
 		FuncFitMD/Q/H="111000000"/NTHR=0 gauss3df W_coef  image /D=image_fit /C=T_Constraints
 	endif
@@ -722,6 +802,10 @@ function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas)
 	// Resize based on outputs of sigmas from fit and then find the correct center position
 	// for the new image by using the same fitting coefficients but allowing only the center
 	// position of the gaussian fit to change.
+	// NO! This works poorly because if there is another g-vector in the image that results 
+	// in a better fit (e.g. if the other spot has a better shape) then the center position gets
+	// moved. It is much better to calculate how much the resizing changed the center position
+	// by and fix it manually.
 	variable xwn, ywn, zwn
 	xwn = round(sqrt(2*ln(10))*W_coef[0])
 	ywn = round(sqrt(2*ln(10))*W_coef[1])
@@ -735,16 +819,30 @@ function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas)
 			endfor
 		endfor
 	endfor
-	wm = wavemax(image)
 	image /= wm
 	duplicate/o image,image_fit
-	image_fit = NaN
-	FuncFitMD/Q/H="111111000"/NTHR=0 gauss3df W_coef  image /D=image_fit //C=T_Constraints
+	//image_fit = NaN
+	//T_Constraints = {"K6 > 0","K6 < 32","K7 > 0","K7 < 30","K8 > 0","K8 < 24"}
+	//T_Constraints[1] = "K6 < " + num2str(xw*extra)
+	//T_Constraints[3] = "K7 < " + num2str(yw*extra)
+	//T_Constraints[5] = "K8 < " + num2str(zw*extra)
+	//FuncFitMD/Q/H="111111000"/NTHR=0 gauss3df W_coef  image /D=image_fit /C=T_Constraints
+	//printf( "Reduced V_chisq = %g\r" ) V_chisq/ (xwn*ywn*zwn - 6)
+	// Fix manually:
+	//print W_coef
+	//printf( "%g %g %g\r" ) particles[r][7]-xw*extra/2, particles[r][7]-xwn, xwn - round(xw*extra/2)
+	//printf( "%g %g %g\r" ) particles[r][8]-yw*extra/2, particles[r][8]-ywn, ywn - round(yw*extra/2)
+	//printf( "%g %g %g\r" ) particles[r][9]-zw*extra/2, particles[r][9]-zwn, zwn - round(zw*extra/2)
+	W_coef[6] += xwn - round(xw*extra/2)
+	W_coef[7] += ywn - round(yw*extra/2)
+	W_coef[8] += zwn - round(zw*extra/2)
+	//print W_coef
+	//printf("\r")
 	
 	// Create the residual image and an image of just the gaussian fit, and calculate the total residual
 	variable res_sum = 0.0
 	duplicate/o image, residuals
-	residuals = 0
+	//residuals = 0
 	for( i=0; i<xwn*2; i += 1)
 		for( j=0; j<ywn*2; j+=1)
 			for( k=0; k<zwn*2; k+=1)
@@ -788,6 +886,7 @@ function fitSpotTo3DGauss(dat, particles, r, extra, hold_sigmas)
 		//WMAppend3DImageSlider();
 	endif
 	return res_sum
+	//return V_chisq/ (xwn*ywn*zwn - 6)
 end
 
 function SaveParamfile(out_fortran)
@@ -833,7 +932,7 @@ function SaveParamfile(out_fortran)
 		fprintf f, "%g %g %g\n", cxy[i], cxz[i], cyz[i]
 		fprintf f, "%g %g %g %g\n", xmin[i]+1, xmax[i]+1, xc[i]+1, gvecs[i]
 		fprintf f, "%g %g %g %g\n", ymin[i]+1, ymax[i]+1, yc[i]+1, gvecs[i]
-		if(i != min(20,DimSize(particles,0))-1)
+		if(i != DimSize(particles,0)-1)
 			fprintf f, "%g %g %g %g\n", zmin[i]+1, zmax[i]+1, zc[i]+1, gvecs[i]
 		else
 			fprintf f, "%g %g %g %g", zmin[i]+1, zmax[i]+1, zc[i]+1, gvecs[i]
@@ -841,6 +940,54 @@ function SaveParamfile(out_fortran)
 	endfor
 	close f
 	killwaves xmin, xmax, ymin, ymax, zmin, zmax, xc, yc, zc
+end
+
+function create_windowed_spots(ft, out, rr)
+	wave out, ft
+	variable rr
+	variable npix = dimsize(ft,0)
+	Duplicate/O/R=[out[rr][0],out[rr][1]] [out[rr][2],out[rr][3]] [out[rr][4],out[rr][5]] ft, wind_im
+	Duplicate/O/R=[npix-out[rr][1],npix-out[rr][0]] [npix-out[rr][3],npix-out[rr][2]] [npix-out[rr][5],npix-out[rr][4]] ft, wind_im_opp
+	Make/O/N=9 coefs
+	coefs[0] = out[rr][11] //sigmas
+	coefs[1] = out[rr][12]
+	coefs[2] = out[rr][13]
+	coefs[3] = out[rr][14] //cxy's
+	coefs[4] = out[rr][15]
+	coefs[5] = out[rr][16]
+	coefs[6] = out[rr][17] //x0's
+	coefs[7] = out[rr][18]
+	coefs[8] = out[rr][19]
+	variable i, j, k
+	for( i=0; i<dimsize(wind_im,0); i+=1)
+		for( j=0; j<dimsize(wind_im,1); j+=1)
+			for( k=0; k<dimsize(wind_im,2); k+=1)
+				wind_im[i][j][k] *= gauss3d(i+out[rr][0],j+out[rr][2],k+out[rr][4],coefs)
+			endfor
+		endfor
+	endfor
+	coefs[6] = npix-coefs[6] // fix x0's
+	coefs[7] = npix-coefs[7]
+	coefs[8] = npix-coefs[8]
+	coefs[3] *= -1 // fix cxy's
+	coefs[4] *= -1
+	coefs[5] *= -1
+	for( i=0; i<dimsize(wind_im_opp,0); i+=1)
+		for( j=0; j<dimsize(wind_im_opp,1); j+=1)
+			for( k=0; k<dimsize(wind_im_opp,2); k+=1)
+				wind_im_opp[i][j][k] *= gauss3d(i+(npix-out[rr][1]),j+(npix-out[rr][3]),k+(npix-out[rr][5]),coefs)
+			endfor
+		endfor
+	endfor
+	killwaves coefs
+end
+
+function create_unwindowed_spots(ft, out, rr)
+	wave out, ft
+	variable rr
+	variable npix = dimsize(ft,0)
+	Duplicate/O/R=[out[rr][0],out[rr][1]] [out[rr][2],out[rr][3]] [out[rr][4],out[rr][5]] ft, unwind_im
+	Duplicate/O/R=[npix-out[rr][1],npix-out[rr][0]] [npix-out[rr][3],npix-out[rr][2]] [npix-out[rr][5],npix-out[rr][4]] ft, unwind_im_opp
 end
 
 function MDsort(w,keycol, reversed)
@@ -1144,6 +1291,8 @@ function ShowXYZLineProfile(dat, particles, r, cut)
 end
 
 function try_automagic_spot_fix(dat, particles, particle_coefs, r, cut)
+	// This function uses ShowXYZLineProfile functions to generate new sigmas for the fit.
+	// It then allows the other parameters (center positions and tilting) to change to optimize the fit.
 	wave dat, particles, particle_coefs
 	variable cut
 	variable r
@@ -1260,11 +1409,11 @@ end
 function AppendGvecsToVk(ft, out, kexp, vkexp)
 	wave ft, out, kexp, vkexp
 	// You must run FindSpots(ft,15) first
-	// Run the full fits on all the spots too to generate "out" but make sure that the 512 pixel version is saved not the 256
+	// Run the full fits on all the spots too to generate "out"
 	
 	setscale/P x,kexp[0],kexp[1]-kexp[0],vkexp
-	make/o/n=(dimsize(out,0)) gvecs, gvecs_id, gvecs_size
-	//make/o/n=(20) gvecs, gvecs_id, gvecs_size
+	//make/o/n=(dimsize(out,0)) gvecs, gvecs_id, gvecs_size
+	make/o/n=(20) gvecs, gvecs_id, gvecs_size
 	gvecs_id = p
 	// if you generated "out" use the better below line, otherwise approximate with the one after
 	gvecs_size = sqrt( out[p][11]^2 + out[p][12]^2 + out[p][13]^2 )/2  // use sigmas to get gvec size
@@ -1272,15 +1421,15 @@ function AppendGvecsToVk(ft, out, kexp, vkexp)
 	gvecs_size*=dimdelta(ft,0)
 	variable rr, i
 	// if you generated "out" use the below loop, otherwise just comment it
-	for(rr=0; rr<dimsize(out,0); rr+=1)
-		out[rr][10] = sqrt( (dimsize(ft,0)/2-out[rr][17])^2 + (dimsize(ft,1)/2-out[rr][18])^2 + (dimsize(ft,2)/2-out[rr][19])^2 )*dimdelta(ft,0)
-	endfor
+	//for(rr=0; rr<dimsize(out,0); rr+=1)
+	//	out[rr][10] = sqrt( (dimsize(ft,0)/2-out[rr][17])^2 + (dimsize(ft,1)/2-out[rr][18])^2 + (dimsize(ft,2)/2-out[rr][19])^2 )*dimdelta(ft,0)
+	//endfor
 	gvecs = out[p][10]
 	duplicate/o gvecs, gvecs_y
 	setscale/P x,kexp[0],kexp[1]-kexp[0],vkexp
 	variable x1, x2
-	for(rr=0; rr<dimsize(out,0); rr+=1)
-	//for(rr=0; rr<20; rr+=1)
+	//for(rr=0; rr<dimsize(out,0); rr+=1)
+	for(rr=0; rr<20; rr+=1)
 		for(i=0; i<dimsize(kexp,0); i+=1)
 			if( kexp[i] > gvecs[rr] )
 				x1 = i - 1
@@ -1294,8 +1443,8 @@ function AppendGvecsToVk(ft, out, kexp, vkexp)
 		//gvecs_y[rr] = vkexp[x2pnt(vkexp,gvecs[rr])]
 		//print gvecs_y[rr]
 	endfor
-	Sort gvecs gvecs_y,gvecs,gvecs_id,gvecs_size
-	Display  root:vkexp
+	//Sort gvecs gvecs_y,gvecs,gvecs_id,gvecs_size
+	Display  vkexp
 	AppendToGraph gvecs_y vs gvecs
 	ModifyGraph mode(gvecs_y)=3,marker(gvecs_y)=19,msize(gvecs_y)=1.5;DelayUpdate
 	ModifyGraph rgb(gvecs_y)=(0,0,0)
@@ -1327,5 +1476,124 @@ function cut_ft_smaller_for_isosurface(ft)
 				ft_iso[i-128][j-128][k-128] = ft[i][j][k]
 			endfor
 		endfor
+	endfor
+end
+
+function window_edge_checking(out)
+	wave out
+	Make/O/N=9 W_coef
+	variable i
+	variable allowance = 0.5 // in percent
+	for( i=0; i<dimsize(out,0); i+=1 )
+		W_coef[0] = out[i][11]/2
+		W_coef[1] = out[i][12]/2
+		W_coef[2] = out[i][13]/2
+		W_coef[3] = out[i][14]
+		W_coef[4] = out[i][15]
+		W_coef[5] = out[i][16]
+		W_coef[6] = out[i][17]
+		W_coef[7] = out[i][18]
+		W_coef[8] = out[i][19]
+		
+		if( gauss3d(out[i][0],out[i][8],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][2],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][8],out[i][4],W_coef)*100 > allowance || gauss3d(out[i][1],out[i][8],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][3],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][8],out[i][5],W_coef)*100 > allowance )
+		
+		printf( "%g  " ) i //, gauss3d(out[i][0],out[i][8],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][2],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][8],out[i][4],W_coef)*100, gauss3d(out[i][1],out[i][8],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][3],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][8],out[i][5],W_coef)*100
+		
+		endif
+		
+		if( gauss3d(out[i][0],out[i][8],out[i][9],W_coef)*100 > allowance )
+			printf( "xi gauss = %g  ") gauss3d(out[i][0],out[i][8],out[i][9],W_coef)*100
+		endif
+		if( gauss3d(out[i][7],out[i][2],out[i][9],W_coef)*100 > allowance )
+			printf( "yi gauss = %g  ") gauss3d(out[i][7],out[i][2],out[i][9],W_coef)*100
+		endif
+		if( gauss3d(out[i][7],out[i][8],out[i][4],W_coef)*100 > allowance )
+			printf( "zi gauss = %g  ") gauss3d(out[i][7],out[i][8],out[i][4],W_coef)*100
+		endif
+		
+		if( gauss3d(out[i][1],out[i][8],out[i][9],W_coef)*100 > allowance )
+			printf( "xf gauss = %g  ") gauss3d(out[i][1],out[i][8],out[i][9],W_coef)*100
+		endif
+		if( gauss3d(out[i][7],out[i][3],out[i][9],W_coef)*100 > allowance )
+			printf( "yf gauss = %g  ") gauss3d(out[i][7],out[i][3],out[i][9],W_coef)*100
+		endif
+		if( gauss3d(out[i][7],out[i][8],out[i][5],W_coef)*100 > allowance )
+			printf( "zf gauss = %g  ") gauss3d(out[i][7],out[i][8],out[i][5],W_coef)*100
+		endif
+		
+		if( gauss3d(out[i][0],out[i][8],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][2],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][8],out[i][4],W_coef)*100 > allowance || gauss3d(out[i][1],out[i][8],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][3],out[i][9],W_coef)*100 > allowance || gauss3d(out[i][7],out[i][8],out[i][5],W_coef)*100 > allowance )
+		
+		printf( "\r" ) //, gauss3d(out[i][0],out[i][8],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][2],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][8],out[i][4],W_coef)*100, gauss3d(out[i][1],out[i][8],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][3],out[i][9],W_coef)*100, gauss3d(out[i][7],out[i][8],out[i][5],W_coef)*100
+		
+		endif
+		
+	endfor
+end
+
+function compare_centers(out,particles)
+	wave out, particles
+	// Calculates the distance between the two center positions. Units are number of pixels.
+	variable rr, x1,x2,y1,y2,z1,z2, dist
+	for( rr=0; rr<dimsize(out,0); rr+=1)
+		compare_center(out,particles,rr)
+	endfor
+end
+
+function compare_center(out,particles,rr)
+	wave out, particles
+	variable rr
+	variable x1,x2,y1,y2,z1,z2, dist
+	x1 = out[rr][7]
+	y1 = out[rr][8]
+	z1 = out[rr][9]
+	x2 = particles[rr][7]
+	y2 = particles[rr][8]
+	z2 = particles[rr][9]
+	dist = sqrt( (x1-x2)^2 + (y1-y2)^2 + (z1-z2)^2 )
+	printf( "Dist for spot %g = %g\r") rr, dist
+end
+
+function try_automagic_fix_holdcenter(dat, particles, particle_coefs, r, W_coef)
+	// This function uses the center particle position from "particles" and allows the other parameters to vary in the fitting.
+	// This function also doesn't work.
+	wave dat, particles, particle_coefs, W_coef
+	variable r
+	wave out = $"out"
+	wave out_fortran = $"out_fortran"
+	W_coef[6] = particles[r][7]
+	W_coef[7] = particles[r][8]
+	W_coef[8] = particles[r][9]
+	gauss_fit_particle(dat, particles, r, particle_coefs, 0, 1) // set hold == 1 so that the centers are held constant, but don't hold sigmas constant
+	create_output_particle(dat, particles, particle_coefs, r, out, out_fortran)
+end
+
+function regenerate_and_show_spot(ft, particles, particle_coefs, out, out_fortran, r)
+	wave ft, particles, particle_coefs, out, out_fortran
+	variable r
+	gauss_fit_particle(ft, particles, r, particle_coefs, 0, 0)  // change sigma hold here to 1 if modifying W_coef manually
+	create_output_particle(ft, particles, particle_coefs, r, out, out_fortran)
+	create_windowed_spots(ft, out, r)
+	//NewImage  root:wind_im
+	//WMAppend3DImageSlider();
+end
+
+function search_for_multiple_spots(ft, particles, particle_coefs, out, out_fortran)//, r)
+	wave ft, particles, particle_coefs, out, out_fortran
+	variable r
+	for( r=0; r<dimsize(particles,0); r+=1)
+
+	regenerate_and_show_spot(ft, particles, particle_coefs, out, out_fortran, r)
+	wave wind_im
+	ImageThreshold /Q/I/M=1 wind_im
+	variable i, thresh
+	thresh = V_threshold
+	for( i=1.0; i<=3.0; i+=0.1)
+		ImageThreshold /Q/I/T=(thresh*i) wind_im
+		ImageAnalyzeParticles/A=0 stats M_ImageThresh
+		if( dimsize(M_3DParticleInfo,0) > 1)
+			printf( "    Spot %g may have more than one g-vector in it, you should check. Use Threshold = %g.\r" ) r, thresh*i
+		endif
+	endfor
+	
 	endfor
 end

@@ -71,6 +71,7 @@
 // 10/11/12:  Added OneGaussFitWiggle, modified GaussianFit to use it, and modified other calls to GaussianFit for consistency, pmv.
 // 6/22/13: Modified GaussianFit and OneGaussFitWiggle to discard fits that fail to converge or have a center outside the fit box.  pmv
 // 12/5/14: Added GaussianFitStack: find Gaussian atom fit parameters for every image in a series.  pmv
+// 12/5/14: Added option to fit to fixed atom center position to GaussianFit for use in GaussianFitStack.  pmv
 
 
 // This function converts images in counts to electrons
@@ -336,10 +337,10 @@ end
 // This function fits the peak positions that are in x_loc and y_loc that were found in the previous routine.
 // This only works for 2D Gaussian fits. Si dumbbells need a different fitting routine.
 // Inputs: image, x_loc, y_loc, and gaussian fit size x size.
-function GaussianFit(image, x_loc, y_loc, size, wiggle)
+function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy])
 	
 	wave image, x_loc, y_loc
-	variable size, wiggle
+	variable size, wiggle, fix_xy
 	variable half_size = size / 2
 	variable num_peaks = DimSize(x_loc,0)
 	variable success, V_FitError
@@ -359,24 +360,40 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle)
 
 	Make/O/N=(num_peaks) z0, A, x0, xW, y0, yW, cor
 	Make/O/N=(num_peaks) sigma_z0, sigma_A, sigma_x0, sigma_xW, sigma_y0, sigma_yW, sigma_cor
+	Make/O/N=6 W_Coef, W_Sigma
 
 	variable i
 	for(i=0; i<num_peaks; i+=1)
 		
 		success = 1
-		if(wiggle == 0)
-			V_FitError =0
-			CurveFit/M=2/W=2/Q gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D
-			if(V_FitError)
+		if(fix_xy == 1)  // fit with held x and y center positions
+			if(wiggle == 0)
+				V_FitError = 0
+				CurveFit/M=2/W=2/Q/O gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // generate initial guesses
+				W_Coef[2] = x_loc[i]  // replace guessed (x,y) position with fixed position
+				W_Coef[4] = y_loc[i]
+				CurveFit/M=2/W=2/Q/H="0010100" gauss2D, kwCWave = W_Coef, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // do the fit
+				if(V_FitError)
+					success = 0
+					printf "V_FitError = %d.\t", V_FitError
+				endif
+			else
+				printf "Fixed (x,y) atom center position & wiggle fit not yet implemented.\r"
 				success = 0
-				printf "V_FitError = %d.\t", V_FitError
-			endif
-		else	
-			success = OneGaussFitWiggle(image, x_loc[i], y_loc[i], size, wiggle)
-		endif
+			endif				
 		
-		wave W_coef = $"W_coef"
-		wave W_sigma = $"W_sigma"
+		else		
+			if(wiggle == 0)
+				V_FitError =0
+				CurveFit/M=2/W=2/Q gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D
+				if(V_FitError)
+					success = 0
+					printf "V_FitError = %d.\t", V_FitError
+				endif
+			else	
+				success = OneGaussFitWiggle(image, x_loc[i], y_loc[i], size, wiggle)
+			endif
+		endif
 		
 		if(W_coef[2] <= x_start[i] || W_coef[2] >= x_finish[i])
 			printf "x0 out of range.\t"
@@ -1092,9 +1109,9 @@ function Precision(image, size, x_space, y_space, space_delta, x_angle, y_angle,
 end
 
 // Gaussian fit on every image in a stack, starting from the same initial guess positions without peak finding
-function GaussianFitStack(st, x_loc, y_loc, size, wiggle)
+function GaussianFitStack(st, x_loc, y_loc, size, wiggle [fix_xy])
 	wave st, x_loc, y_loc
-	variable size, wiggle
+	variable size, wiggle, fix_xy
 	
 	string cur_fol = GetDataFolder(1)
 	NewDataFolder/O/S root:Packages
@@ -1111,7 +1128,11 @@ function GaussianFitStack(st, x_loc, y_loc, size, wiggle)
 		ImageTransform/P=(i) getplane st
 		wave im = $"M_ImagePlane"
 		
-		GaussianFit(im, x_loc, y_loc, size, wiggle)
+		if(fix_xy == 1)
+			GaussianFit(im, x_loc, y_loc, size, wiggle, fix_xy = fix_xy)
+		else
+			GaussianFit(im, x_loc, y_loc, size, wiggle)
+		endif
 		
 		wave z0 = $"z0"
 		wave A = $"A"
@@ -1148,19 +1169,19 @@ function GaussianFitStack(st, x_loc, y_loc, size, wiggle)
 	killwaves z0, A, x0, xW, y0, yW, cor, sigma_z0, sigma_A, sigma_x0, sigma_xW, sigma_y0, sigma_yW, sigma_cor	
 	
 	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
+	Duplicate/O A_st $(cur_fol+"A_st")
+	Duplicate/O x0_st $(cur_fol+"x0_st")
+	Duplicate/O xW_st $(cur_fol+"xW_st")
+	Duplicate/O y0_st $(cur_fol+"y0_st")
+	Duplicate/O yW_st $(cur_fol+"yW_st")
+	Duplicate/O cor_st $(cur_fol+"cor_st")
+	Duplicate/O sig_z0_st $(cur_fol+"sig_z0_st")
+	Duplicate/O sig_A_st $(cur_fol+"sig_A_st")
+	Duplicate/O sig_x0_st $(cur_fol+"sig_x0_st")
+	Duplicate/O sig_xW_st $(cur_fol+"sig_xW_st")
+	Duplicate/O sig_y0_st $(cur_fol+"sig_y0_st")
+	Duplicate/O sig_yW_st $(cur_fol+"sig_yW_st")
+	Duplicate/O sig_cor_st $(cur_fol+"sig_cor_st")
 	
 	SetDataFolder $cur_fol
 	

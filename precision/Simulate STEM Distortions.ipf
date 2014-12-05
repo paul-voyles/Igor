@@ -19,7 +19,7 @@ function STEMDistortionStack(im, steps)
 	
 	// parameters describing the image series
 	variable nx = 256, ny = 256, npix = nx*ny
-	variable x0=19.558, y0=24.142
+	variable x0=22.0, y0=20.0
 	variable dwell = 16e-6 				// pixel dwell time in seconds
 	variable flyback = 60e-6 			// line flyback time in seconds
 	variable interframe = 1e-3 			// frame-to-frame delay time in seconds

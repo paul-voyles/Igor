@@ -1,14 +1,16 @@
 #pragma rtGlobals=1		// Use modern global access method.
 // Created/updated on 12/8/14.  ABY
 //
-// These functions are for calculating average lattice paramters, creating perfect 2D lattices of atomic column positions from those parameters, and fitting the perfect lattices to 
-// experimental lattices by minimizing the rms between all the points.
+// These functions are for calculating average lattice paramters, creating perfect 2D lattices of atomic column positions from those 
+// parameters, and fitting the perfect lattices to experimental lattices by minimizing the rms between all the points.
 
 
 
-// This functions finds the average lattice parameters(a,b) of a two-dimensional grid of atomic columns positions with only 1 atom basis listed in x0 and y0. 
+// This functions finds the average lattice parameters(a,b) of a two-dimensional grid of atomic columns positions with only 1 atom basis
+// listed in x0 and y0. 
 // The order of the atoms positions in the x0, y0 list of atom positions can be in any order, but x0[i] must correspond to y0[i].
-// a_space and b_space are guesses of what the seperations are for the lattice paramters. space_delta is the +/- separation error window for the selection process. 
+// a_space and b_space are guesses of what the seperations are for the lattice paramters. space_delta is the +/- separation error window
+// for the selection process. 
 // a_angle and b_angle are guesses for the angles of the lattice parameters. angle_delta is the +/- angle error window for the selection process. 
 // horizantal is 0 degrees. straight down is -90 degrees.
 // +/- 10% seems to work for the space_delta and angle_delta.
@@ -270,6 +272,14 @@ function CreateGridWithBasis(na, nb)
 	
 	wave x0 = $"x0"
 	wave y0 = $"y0"
+	if(!waveexists(x0))
+		print "Cannot find wave x0.  Exiting.\r"
+		return 0
+	endif
+	if(!waveexists(y0))
+		print "Cannot find wave y0.  Exiting.\r"
+		return 0
+	endif
 	
 	//calculate the position in x0, y0 that is closest to the origin to which x_lat and y_lat will be initialized
 	variable x_initial, y_initial =10000000
@@ -316,8 +326,9 @@ function SortGrid(x_lat, y_lat, x0, y0, error)
 	variable error
 	
 	variable npts = numpnts(x0)
-	Duplicate/o x0, x_lat_sort
-	Duplicate/o y0, y_lat_sort
+	make/o/n=(npts) x_lat_sort, y_lat_sort
+	x_lat_sort = NaN
+	y_lat_sort = NaN
 	
 	variable count = 0
 	variable i, j = 0

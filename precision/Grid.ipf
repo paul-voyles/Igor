@@ -3,7 +3,10 @@
 //
 // These functions are for calculating average lattice paramters, creating perfect 2D lattices of atomic column positions from those 
 // parameters, and fitting the perfect lattices to experimental lattices by minimizing the rms between all the points.
-
+//
+// 12-09-14 Added checking for a few more assumed pre-existing waves; modified SortGrid to not return fitted atom positions if
+// matching grid atoms are not found.  pmv
+// 12-09-14 Modified BasisParameters and CreateGridWithBasis to allow any number of basis atoms, not just one.  pmv
 
 
 // This functions finds the average lattice parameters(a,b) of a two-dimensional grid of atomic columns positions with only 1 atom basis
@@ -148,24 +151,52 @@ function BasisParameters(x0, y0, c_space, space_delta, c_angle, angle_delta)
 		endfor
 	endfor
 
-	// calculate and save the b parameters
-	wavestats/Q/W cx
-	wave M_WaveStats = $"M_WaveStats"
-	variable cx_average = M_WaveStats(3)
-	variable cx_stdev = M_WaveStats(4)
-	wavestats/Q/W cy
-	wave M_WaveStats = $"M_WaveStats"
-	variable cy_average = M_WaveStats(3)
-	variable cy_stdev = M_WaveStats(4)
-	make/o/n=3 c_param
-	c_param[0] = cx_average
-	c_param[1] = cy_average
-	c_param[2] = atan(cy_average/cx_average) * 180 / Pi
-	print "c lattice basis in ( x , y , angle ) = (", c_param[0], ",", c_param[1], ",", c_param[2], ") and found", dimsize(cx,0), "seperations."
+	if(numpnts(cx) > 0)
 	
-	killwaves M_WaveStats
+		// calculate and save the c parameters
+		wavestats/Q/W cx
+		wave M_WaveStats = $"M_WaveStats"
+		variable cx_average = M_WaveStats(3)
+		variable cx_stdev = M_WaveStats(4)
+		wavestats/Q/W cy
+		wave M_WaveStats = $"M_WaveStats"
+		variable cy_average = M_WaveStats(3)
+		variable cy_stdev = M_WaveStats(4)
+
+		wave c_param = $"c_param"
+		if(!WaveExists(c_param))
+			make/o/n=(3, 1) c_param
+		else
+			InsertPoints/M=1 0, 1, c_param
+		endif
+
+		c_param[0][0] = cx_average
+		c_param[1][0] = cy_average
+		c_param[2][0] = atan(cy_average/cx_average) * 180 / Pi
+		print "c lattice basis in ( x , y , angle ) = (", c_param[0], ",", c_param[1], ",", c_param[2], ") and found", dimsize(cx,0), "seperations."
+		killwaves M_WaveStats
+	
+	else
+		printf "No matching interatomic distances found within tolerances.\r"
+	endif
+	
 end
 
+
+// print the vector in (length, angle) parameter space from point (x1, x2) to (y1, y2).  Use with hcsr() and vcsr() functions to define
+// vectors on an image - EstimateVector(hcsr(A), hcsr(B), vcsr(A), vcsr(B))
+function EstimateVector(x1, x2, y1, y2)
+	variable x1, x2, y1, y2
+
+	variable xm, ym, d, angle
+	xm = (x1 - x2)
+	ym = (y1 - y2)
+	d = sqrt((xm^2) + (ym^2))
+	angle = atan(ym/xm) * 180 / Pi
+
+	printf "Vector from point (%g, %g) to (%g, %g) is d = %g, angle = %g\r", x1, x2, y1, y2, d, angle
+
+end
 
 // This function creates a perfect 2D lattice of positions from what is in a_param and b_param. 
 // This function only creates a 2D lattice with a 1 atom basis.
@@ -234,44 +265,27 @@ end
 // This function automatically initializes(shifts) the position of the gird so that the atom position closest to (0,0) in (x_lat, y_lat) is equal to the atom position closest to (0,0) in (x0, y0).
 // This function also automatically sorts x_lat and y_lat so that (x_lat[i], y_lat[i]) corresponds to the same atom position (i) in x0, y0. These soted outputs are found in x_lat_sort, y_lat_sort.
 function CreateGridWithBasis(na, nb)
-
 	variable na, nb
-	variable numatoms = na * nb * 2
 
 	//open parameter waves
 	wave tmp_a_param = $"a_param"
 	wave tmp_b_param = $"b_param"
 	wave tmp_c_param = $"c_param"
-		if(!waveexists(tmp_a_param))
-			print "You are an idoit, a_param doesn't exist.\r"
-			return 0
-		endif
-		if(!waveexists(tmp_b_param))
-			print "You are an idoit, b_param doesn't exist.\r"
-			return 0
-		endif
-		if(!waveexists(tmp_c_param))
-			print "You are an idoit, c_param doesn't exist.\r"
-			return 0
-		endif
-	
-	Make/o/n=(numatoms) y_lat, x_lat
-	
-	//populate lattice with a and b parameters with the c basis
-	variable i, j, k
-	k=0
-	for(i=0; i<na; i+=1)
-		for(j=0; j<nb; j+=1)
-			x_lat[k] = (i * tmp_a_param(0)) + (j * tmp_b_param(0))
-			y_lat[k] = (i * tmp_a_param(1)) + (j * tmp_b_param(1))
-			x_lat[k+1] = x_lat[k] + tmp_c_param(0)
-			y_lat[k+1] = y_lat[k] + tmp_c_param(1)
-			k = k+2
-		endfor
-	endfor
-	
 	wave x0 = $"x0"
 	wave y0 = $"y0"
+
+	if(!waveexists(tmp_a_param))
+		print "You are an idoit, a_param doesn't exist.\r"
+		return 0
+	endif
+	if(!waveexists(tmp_b_param))
+		print "You are an idoit, b_param doesn't exist.\r"
+		return 0
+	endif
+	if(!waveexists(tmp_c_param))
+		print "You are an idoit, c_param doesn't exist.\r"
+		return 0
+	endif
 	if(!waveexists(x0))
 		print "Cannot find wave x0.  Exiting.\r"
 		return 0
@@ -280,6 +294,30 @@ function CreateGridWithBasis(na, nb)
 		print "Cannot find wave y0.  Exiting.\r"
 		return 0
 	endif
+	
+	
+	variable numbasis = DimSize(tmp_c_param, 1)
+	variable numatoms = (na+1) * (nb+1) * numbasis
+
+	Make/o/n=(numatoms) y_lat, x_lat
+	x_lat = 0
+	y_lat = 0
+	
+	//populate lattice with a and b parameters with the c basis
+	variable i, j, k, l
+	l = 0
+	for(i=0; i<na; i+=1)
+		for(j=0; j<nb; j+=1)
+			x_lat[l] = (i * tmp_a_param[0]) + (j * tmp_b_param[0])
+			y_lat[l] = (i * tmp_a_param[1]) + (j * tmp_b_param[1])
+			l += 1
+			for(k=0; k<numbasis; k+=1)
+				x_lat[l] = x_lat[l-(k+1)] + tmp_c_param[0][k]
+				y_lat[l] = y_lat[l-(k+1)] + tmp_c_param[1][k]
+				l+=1
+			endfor
+		endfor
+	endfor
 	
 	//calculate the position in x0, y0 that is closest to the origin to which x_lat and y_lat will be initialized
 	variable x_initial, y_initial =10000000
@@ -295,7 +333,7 @@ function CreateGridWithBasis(na, nb)
 		endif
 	endfor
 	
-	//Initialize x_lat and y_lat
+	// Initialize x_lat and y_lat
 	InitializeGrid(x_lat, y_lat, x_initial, y_initial)
 	//Sort x_lat and y_lat waves to be in same aroder as x0 and y0. outputs are x_lat_sort and y_lat_sort
 	SortGrid(x_lat, y_lat, x0, y0, 2)

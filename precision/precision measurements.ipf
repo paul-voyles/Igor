@@ -72,7 +72,7 @@
 // 6/22/13: Modified GaussianFit and OneGaussFitWiggle to discard fits that fail to converge or have a center outside the fit box.  pmv
 // 12/5/14: Added GaussianFitStack: find Gaussian atom fit parameters for every image in a series.  pmv
 // 12/5/14: Added option to fit to fixed atom center position to GaussianFit for use in GaussianFitStack.  pmv
-
+// 12/9/14: modify PeakPositions to use the current data folder, not hard-coded for root data folder.  pmv
 
 // This function converts images in counts to electrons
 // inputs: original image in HAADF counts, numSamples, and cm = average count in HAADF probe image,
@@ -254,7 +254,7 @@ function PeakPositions(image)
 	
 	//Auto Threshold
 	ImageThreshold/I/M=(1)/Q image
-	ImageAnalyzeParticles /E/W/Q/F/M=3/A=15/EBPC stats, root:M_ImageThresh
+	ImageAnalyzeParticles /E/W/Q/F/M=3/A=15/EBPC stats, M_ImageThresh
 	
 	duplicate/O W_xmin x_loc	
 	duplicate/O W_ymin y_loc

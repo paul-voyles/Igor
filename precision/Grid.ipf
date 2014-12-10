@@ -353,8 +353,79 @@ function CreateGridWithBasis(na, nb)
 	// Sort x_lat and y_lat waves to be in same order as x0 and y0. outputs are x_lat_sort and y_lat_sort
 	SortGrid(x_lat, y_lat, x0, y0, 2)
 	
+	Killwaves dist_t
+	
 end
 
+
+// grid with starting point.  (sx ,sy) is the origin for the lattice.  However, it runs from sa to sa+na unit cells
+// along the a parameter and sb to sb+nb along the b parameter.  Uses global waves a_param, b_param, and 
+// c_param.
+function CreateGridFromPoint(sx, sy, sa, sb, na, nb)
+	variable sx, sy, sa, sb, na, nb
+	
+	//open parameter waves
+	wave tmp_a_param = $"a_param"
+	wave tmp_b_param = $"b_param"
+	wave tmp_c_param = $"c_param"
+	wave x0 = $"x0"
+	wave y0 = $"y0"
+
+	if(!waveexists(tmp_a_param))
+		print "You are an idoit, a_param doesn't exist.\r"
+		return 0
+	endif
+	if(!waveexists(tmp_b_param))
+		print "You are an idoit, b_param doesn't exist.\r"
+		return 0
+	endif
+	if(!waveexists(tmp_c_param))
+		print "You are an idoit, c_param doesn't exist.\r"
+		return 0
+	endif
+	if(!waveexists(x0))
+		print "Cannot find wave x0.  Exiting.\r"
+		return 0
+	endif
+	if(!waveexists(y0))
+		print "Cannot find wave y0.  Exiting.\r"
+		return 0
+	endif
+	
+	
+	variable numbasis = DimSize(tmp_c_param, 1)
+	variable numatoms = na * nb * (numbasis+1)
+
+	Make/o/n=(numatoms) y_lat, x_lat
+	x_lat = 0
+	y_lat = 0
+	
+	// adjust starting points for non-zero sa, sb
+	sx += sa*tmp_a_param[0] + sb*tmp_b_param[0]
+	sy += sa*tmp_a_param[1] + sb*tmp_b_param[1]
+	
+	//populate lattice with a and b parameters with the c basis
+	variable i, j, k, l
+	l = 0
+	for(i=0; i<na; i+=1)
+		for(j=0; j<nb; j+=1)
+			x_lat[l] = sx + (i * tmp_a_param[0]) + (j * tmp_b_param[0])
+			y_lat[l] = sy + (i * tmp_a_param[1]) + (j * tmp_b_param[1])
+			l += 1
+			for(k=0; k<numbasis; k+=1)
+				x_lat[l] = x_lat[l-(k+1)] + tmp_c_param[0][k]
+				y_lat[l] = y_lat[l-(k+1)] + tmp_c_param[1][k]
+				l+=1
+			endfor
+		endfor
+	endfor
+	
+	// Sort x_lat and y_lat waves to be in same order as x0 and y0. outputs are x_lat_sort and y_lat_sort
+	// allowable error is set to 20% of the shorter lattice parameter.
+	variable err = 0.2*min( sqrt(tmp_a_param[0]^2 + tmp_a_param[1]^2), sqrt(tmp_b_param[0]^2 + tmp_b_param[1]^2) )
+	SortGrid(x_lat, y_lat, x0, y0, err)	
+	
+end
 
 // This function shifts the entire prefect lattice in x_lat, y_lat by shifting (x_lat[0], y_lat[0]) to the position (x_initial, y_initial)
 function InitializeGrid(x_lat, y_lat, x_initial, y_initial)
@@ -378,6 +449,7 @@ function SortGrid(x_lat, y_lat, x0, y0, error)
 	variable error
 	
 	variable npts = numpnts(x0)
+	variable nlat = numpnts(x_lat)
 	make/o/n=(npts) x_lat_sort, y_lat_sort
 	x_lat_sort = NaN
 	y_lat_sort = NaN
@@ -385,7 +457,7 @@ function SortGrid(x_lat, y_lat, x0, y0, error)
 	variable count = 0
 	variable i, j = 0
 	for(i=0; i<npts; i+=1)
-		for(j=0; j<npts; j+=1)
+		for(j=0; j<nlat; j+=1)
 			if(x_lat[j] > (x0[i]-error) && x_lat[j] < (x0[i]+error))
 				if(y_lat[j] > (y0[i]-error) && y_lat[j] < (y0[i]+error))
 					x_lat_sort[i] = x_lat[j]

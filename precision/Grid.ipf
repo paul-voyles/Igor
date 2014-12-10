@@ -7,6 +7,9 @@
 // 12-09-14 Added checking for a few more assumed pre-existing waves; modified SortGrid to not return fitted atom positions if
 // matching grid atoms are not found.  pmv
 // 12-09-14 Modified BasisParameters and CreateGridWithBasis to allow any number of basis atoms, not just one.  pmv
+// 12-10-14 bug fix for number of atoms in CreateGridWithBasis. pmv
+// 12-10-14 change CreateGridWithBasis to shift the created grid to the center of the atom positions, then shift to the nearest matching
+// grid / atom pair.  pmv
 
 
 // This functions finds the average lattice parameters(a,b) of a two-dimensional grid of atomic columns positions with only 1 atom basis
@@ -228,8 +231,8 @@ function CreateGrid(na, nb)
 	k=0
 	for(i=0; i<na; i+=1)
 		for(j=0; j<nb; j+=1)
-			x_lat[k] = (i * tmp_a_param(0)) + (j * tmp_b_param(0))
-			y_lat[k] = (i * tmp_a_param(1)) + (j * tmp_b_param(1))
+			x_lat[k] = (i * tmp_a_param[0]) + (j * tmp_b_param[0])
+			y_lat[k] = (i * tmp_a_param[1]) + (j * tmp_b_param[1])
 			k = k+1
 		endfor
 	endfor
@@ -297,7 +300,7 @@ function CreateGridWithBasis(na, nb)
 	
 	
 	variable numbasis = DimSize(tmp_c_param, 1)
-	variable numatoms = (na+1) * (nb+1) * numbasis
+	variable numatoms = na * nb * (numbasis+1)
 
 	Make/o/n=(numatoms) y_lat, x_lat
 	x_lat = 0
@@ -319,27 +322,38 @@ function CreateGridWithBasis(na, nb)
 		endfor
 	endfor
 	
-	//calculate the position in x0, y0 that is closest to the origin to which x_lat and y_lat will be initialized
-	variable x_initial, y_initial =10000000
-	variable initial_distance = sqrt((x_initial^2) + (y_initial^2))
-	variable distance
-	i=0
-	for(i=0; i<DimSize(x0,0); i+=1)
-		distance = sqrt((x0[i]^2) + (y0[i]^2))
-		if(distance < initial_distance)
-			x_initial = x0[i]
-			y_initial = y0[i]
-			initial_distance = distance
-		endif
-	endfor
 	
-	// Initialize x_lat and y_lat
-	InitializeGrid(x_lat, y_lat, x_initial, y_initial)
-	//Sort x_lat and y_lat waves to be in same aroder as x0 and y0. outputs are x_lat_sort and y_lat_sort
+	// shift the calculated grid to cover the same range of coordinates as the fitted atom positions
+	// then to exactly overlap with one particular atom
+	variable x0_mid, y0_mid
+	variable gridx_mid, gridy_mid
+	
+	wavestats/q/M=0 x0
+	x0_mid = (V_max + V_min)/2
+	wavestats/q/M=0 y0
+	y0_mid = (V_max + V_min)/2
+	wavestats/q/M=0 x_lat
+	gridx_mid = (V_max + V_min)/2
+	wavestats/q/M=0 y_lat
+	gridy_mid = (V_max + V_min)/2
+	
+	// rough center the grid on the atom positions
+	x_lat = x_lat + (x0_mid - gridx_mid)
+	y_lat = y_lat + (y0_mid - gridy_mid)
+
+	// now find the closest grid / atom pair
+	Make/O/N=(numpnts(x_lat), numpnts(x0)) dist_t
+	dist_t = (x_lat[p] - x0[q])^2 + (y_lat[p] - y0[q])^2
+	wavestats/q/M=0 dist_t
+	variable shift_x = x0[V_minColLoc] - x_lat[V_minRowLoc]
+	variable shift_y = y0[V_minColLoc] - y_lat[V_minRowLoc]
+	x_lat = x_lat + shift_x
+	y_lat = y_lat + shift_y
+		
+	// Sort x_lat and y_lat waves to be in same order as x0 and y0. outputs are x_lat_sort and y_lat_sort
 	SortGrid(x_lat, y_lat, x0, y0, 2)
 	
 end
-
 
 
 // This function shifts the entire prefect lattice in x_lat, y_lat by shifting (x_lat[0], y_lat[0]) to the position (x_initial, y_initial)

@@ -252,8 +252,13 @@ function PeakPositions(image)
 	//ImageThreshold/I/M=(0)/Q/T=22500 image
 	//ImageAnalyzeParticles /E/W/Q/F/M=3/A=1/EBPC stats, root:M_ImageThresh
 	
+	// Add ROI to ignore pixels in input image that are NaN
+	duplicate/O image roi_tmp
+	Redimension/b/u roi_tmp
+	roi_tmp = numtype(image)
+	
 	//Auto Threshold
-	ImageThreshold/I/M=(1)/Q image
+	ImageThreshold/I/M=(1)/Q/R={roi_tmp, 2} image
 	ImageAnalyzeParticles /E/W/Q/F/M=3/A=15/EBPC stats, M_ImageThresh
 	
 	duplicate/O W_xmin x_loc	
@@ -271,6 +276,8 @@ function PeakPositions(image)
 	
 	killwaves W_ImageObjArea, W_SpotX, W_SpotY, W_circularity, W_rectangularity, W_ImageObjPerimeter, M_Moments, M_RawMoments
 	killwaves W_BoundaryX, W_BoundaryY, W_BoundaryIndex, W_xmin, W_xmax, W_ymin, W_ymax, xmin, xmax, ymin, ymax
+	Killwaves roi_tmp
+	Killwaves M_ImageTresh, M_Particle
 end
 
 
@@ -439,7 +446,8 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy])
 
 	endfor	
 
-	//killwaves W_sigma, W_coef, M_covar
+	killwaves W_sigma, W_coef, M_covar, x_finish, x_start, y_finish, y_start, noise
+	Killwaves M_Covar, $("fit_" + NameofWave(image))
 end
 
 

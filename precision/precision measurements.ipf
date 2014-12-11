@@ -73,6 +73,7 @@
 // 12/5/14: Added GaussianFitStack: find Gaussian atom fit parameters for every image in a series.  pmv
 // 12/5/14: Added option to fit to fixed atom center position to GaussianFit for use in GaussianFitStack.  pmv
 // 12/9/14: modify PeakPositions to use the current data folder, not hard-coded for root data folder.  pmv
+// 12/11/14: added StackMean.  Very similar to SumIntensity.  pmv
 
 // This function converts images in counts to electrons
 // inputs: original image in HAADF counts, numSamples, and cm = average count in HAADF probe image,
@@ -1852,5 +1853,24 @@ function SumIntensity(image_stack)
 	
 	endfor
 
-killwaves M_ImagePlane, M_WaveStats
+	killwaves M_ImagePlane, M_WaveStats
+end
+
+// takes an image series (stack) and calculates the mean of each image.
+// Places the results in stack_mean.
+function StackMean(st)
+	wave st
+	
+	make/o/n=(DimSize(st, 2)) stack_mean
+	
+	variable i
+	for(i=0; i<DimSize(st, 2); i+=1)
+		Imagetransform/P=(i) getplane st
+		wave pl = $"M_ImagePlane"
+		wavestats/q/m=1 pl
+		stack_mean[i] = V_avg
+	endfor
+	
+	Killwaves pl
+	
 end

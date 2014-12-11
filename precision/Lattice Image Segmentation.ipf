@@ -100,8 +100,8 @@ function VoronoiCells(im, x0, y0)
 	 
 end
 
-function MakeAllMasks(im, x0, y0, M_VoronoiEdges, Voronoi_Vertices, vertices_per_point)
-	wave im, x0, y0, M_VoronoiEdges, Voronoi_Vertices
+function MakeAllMasks(im, x0, y0, Voronoi_Vertices, vertices_per_point)
+	wave im, x0, y0, Voronoi_Vertices
 	variable vertices_per_point
 	
 	variable tol = 0.05

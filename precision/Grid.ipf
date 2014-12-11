@@ -470,7 +470,39 @@ function SortGrid(x_lat, y_lat, x0, y0, error)
 	print "sorting process correctly found ", count, "of ", npts, "atoms columns"
 end
 
+function TruncateGrid(xs, xe, ys, ye, xl, yl)
+	variable xe, xs, ye, ys
+	wave xl, yl
+	
+	Duplicate/O xl x_lat_trunc
+	Duplicate/O yl y_lat_trunc
+	
+	Sort x_lat_trunc, x_lat_trunc, y_lat_trunc
 
+	FindLevel/Q/P x_lat_trunc, xs
+	if(!V_Flag)
+		DeletePoints 0, V_LevelX-1, x_lat_trunc, y_lat_trunc
+	endif
+	
+	FindLevel/Q/P x_lat_trunc, xe
+	if(!V_Flag)
+		DeletePoints V_LevelX, numpnts(x_lat_trunc), x_lat_trunc, y_lat_trunc
+	endif
+	
+	Sort y_lat_trunc, x_lat_trunc, y_lat_trunc
+
+	FindLevel/Q/P y_lat_trunc, ys
+	if(!V_Flag)
+		DeletePoints 0, V_LevelX-1, x_lat_trunc, y_lat_trunc
+	endif
+	
+	FindLevel/Q/P y_lat_trunc, ye
+	if(!V_Flag)
+		DeletePoints V_LevelX, numpnts(x_lat_trunc), x_lat_trunc, y_lat_trunc
+	endif
+	
+	
+end
 
 // This function finds the position of x_lat_sort and y_lat_sort that minimizes the rms between the positions in (x_lat_sort, y_lat_sort) and (x0, y0).
 // range is the number of pixels in x and y you want to scan over (range x range) = area scanned.

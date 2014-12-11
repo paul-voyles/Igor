@@ -447,7 +447,6 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy])
 	endfor	
 
 	killwaves W_sigma, W_coef, M_covar, x_finish, x_start, y_finish, y_start, noise
-	Killwaves M_Covar, $("fit_" + NameofWave(image))
 end
 
 

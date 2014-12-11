@@ -475,13 +475,15 @@ function MaskCoarseGrain(im, all_masks, im_proc)
 	Duplicate/O im coarse_im
 	Duplicate/O im im_tmp
 	coarse_im = 0
+	variable/G mask_i
 	
 	for(i=0; i<nmasks; i+=1)
 		ImageTransform/P=(i) GetPlane all_masks
 		wave one_mask = $"M_ImagePlane"
 		im_tmp = im
+		mask_i = i
 		im_proc(im_tmp, one_mask)
-		coarse_im += im_tmp
+		MatrixOp/O	coarse_im = coarse_im + im_tmp
 	endfor
 	
 	Killwaves one_mask, im_tmp
@@ -493,6 +495,7 @@ function MaskCoarseGrainStack(im_stack, all_masks, im_proc)
 	
 	variable i, nstack = DimSize(im_stack, 2)
 	Duplicate/O im_stack coarse_im_stack
+	variable/G stack_i
 	
 	for(i=0; i<nstack; i+=1)
 		if(!mod(i, 25))
@@ -502,6 +505,7 @@ function MaskCoarseGrainStack(im_stack, all_masks, im_proc)
 		wave M_ImagePlane = $"M_ImagePlane"
 		Duplicate/O M_ImagePlane stack_tmp
 		Killwaves M_ImagePlane
+		stack_i = i
 		MaskCoarseGrain(stack_tmp, all_masks, im_proc)
 		wave coarse_im = $"coarse_im"
 		Imagetransform/P=(i)/D=coarse_im setplane coarse_im_stack
@@ -512,6 +516,9 @@ function MaskCoarseGrainStack(im_stack, all_masks, im_proc)
 	
 end
 
+// Mask procedures take two input images, im and mask, that are the same size.
+// im contains the full frame image, mask contains the full frame mask, 1 inside
+// the ROI and 0 outside.  The procedure replaces im with the result.
 function ProtoMaskProc(im, mask)
 	wave im, mask
 	
@@ -536,4 +543,62 @@ function MaskAverage(im, mask)
 	
 	Killwaves mask_av_tmp
 	
+end
+
+function MaskZ0(im, mask)
+	wave im, mask
+	
+	NVAR mask_i = $"mask_i"
+	NVAR stack_i = $"stack_i"
+	wave z0_st = $"z0_st"
+
+	variable z0 = z0_st[mask_i][stack_i]
+	
+	if(!numtype(z0))
+		MatrixOp/O im = z0 * mask
+	else
+		im = (mask[p][q] == 1 ? NaN : 0)
+	endif
+
+end
+
+function MaskSubGauss(im, mask)
+	wave im, mask
+
+	NVAR mask_i = $"mask_i"
+	NVAR stack_i = $"stack_i"
+
+	wave z0_st = $"z0_st"
+	wave A_st = $"A_st"
+	wave cor_st = $"cor_st"
+	wave x0_st = $"x0_st"
+	wave y0_st = $"y0_st"
+	wave xW_st = $"xW_st"
+	wave yW_st = $"yW_st"
+
+	if(numtype(z0_st[mask_i][stack_i]))
+		im = (mask[p][q] == 1 ? NaN : 0)
+	else
+		Make/O/N=7 W_Coef
+		W_Coef[0] = z0_st[mask_i][stack_i]
+		W_Coef[1] = A_st[mask_i][stack_i]
+		W_Coef[2] = x0_st[mask_i][stack_i]
+		W_Coef[3] = xW_st[mask_i][stack_i]
+		W_Coef[4] = y0_st[mask_i][stack_i]
+		W_Coef[5] = yW_st[mask_i][stack_i]
+		W_Coef[6] = cor_st[mask_i][stack_i]
+
+		Duplicate/o mask mask_av_tmp
+		mask_av_tmp = (mask[p][q] == 1 ? (im[p][q] - Gauss2D(W_coef, x, y) + z0_st[mask_i][stack_i]) : 0)
+		WaveStats/M=1/Q mask_av_tmp
+		variable im_av = V_avg
+
+		WaveStats/M=1/Q mask
+		variable mask_av = V_avg
+		im = (mask[p][q] == 0 ? 0 : (im_av / mask_av) )
+	
+		Killwaves mask_av_tmp
+
+	endif	
+
 end

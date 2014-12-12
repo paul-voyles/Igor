@@ -74,6 +74,8 @@
 // 12/5/14: Added option to fit to fixed atom center position to GaussianFit for use in GaussianFitStack.  pmv
 // 12/9/14: modify PeakPositions to use the current data folder, not hard-coded for root data folder.  pmv
 // 12/11/14: added StackMean.  Very similar to SumIntensity.  pmv
+// 12/11/14: added "no noise" optional parameter for GaussianFit and GaussianFitStack.  Useful for images with negative pixels, which
+// otherwise are NaN in the sqrt(N) noise image and generate errors from the fit code.  pmv.
 
 // This function converts images in counts to electrons
 // inputs: original image in HAADF counts, numSamples, and cm = average count in HAADF probe image,
@@ -345,10 +347,10 @@ end
 // This function fits the peak positions that are in x_loc and y_loc that were found in the previous routine.
 // This only works for 2D Gaussian fits. Si dumbbells need a different fitting routine.
 // Inputs: image, x_loc, y_loc, and gaussian fit size x size.
-function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy])
+function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy, no_noise])
 	
 	wave image, x_loc, y_loc
-	variable size, wiggle, fix_xy
+	variable size, wiggle, fix_xy, no_noise
 	variable half_size = size / 2
 	variable num_peaks = DimSize(x_loc,0)
 	variable success, V_FitError
@@ -376,30 +378,47 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy])
 		success = 1
 		if(fix_xy == 1)  // fit with held x and y center positions
 			if(wiggle == 0)
-				V_FitError = 0
-				CurveFit/M=2/W=2/Q/O gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // generate initial guesses
-				W_Coef[2] = x_loc[i]  // replace guessed (x,y) position with fixed position
-				W_Coef[4] = y_loc[i]
-				CurveFit/M=2/W=2/Q/H="0010100" gauss2D, kwCWave = W_Coef, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // do the fit
-				if(V_FitError)
-					success = 0
-					printf "V_FitError = %d.\t", V_FitError
+				if(no_noise == 1)  // leave out Poisson noise weighting from the fit
+					V_FitError = 0
+					CurveFit/M=2/W=2/Q/O gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]]  /I=1 /D  // generate initial guesses
+					W_Coef[2] = x_loc[i]  // replace guessed (x,y) position with fixed position
+					W_Coef[4] = y_loc[i]
+					CurveFit/M=2/W=2/Q/H="0010100" gauss2D, kwCWave = W_Coef, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /I=1 /D  // do the fit
+					if(V_FitError)
+						success = 0
+						printf "V_FitError = %d.\t", V_FitError
+					endif
+				else
+					V_FitError = 0
+					CurveFit/M=2/W=2/Q/O gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // generate initial guesses
+					W_Coef[2] = x_loc[i]  // replace guessed (x,y) position with fixed position
+					W_Coef[4] = y_loc[i]
+					CurveFit/M=2/W=2/Q/H="0010100" gauss2D, kwCWave = W_Coef, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // do the fit
+					if(V_FitError)
+						success = 0
+						printf "V_FitError = %d.\t", V_FitError
+					endif
 				endif
 			else
 				printf "Fixed (x,y) atom center position & wiggle fit not yet implemented.\r"
 				success = 0
 			endif				
 		
-		else		
-			if(wiggle == 0)
-				V_FitError =0
-				CurveFit/M=2/W=2/Q gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D
-				if(V_FitError)
-					success = 0
-					printf "V_FitError = %d.\t", V_FitError
+		else
+			if(no_noise == 1)
+				printf "Fitting without noise and without fixed (x,y) position is not implemented yet.\r"
+				success = 0
+			else		
+				if(wiggle == 0)
+					V_FitError =0
+					CurveFit/M=2/W=2/Q gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D
+					if(V_FitError)
+						success = 0
+						printf "V_FitError = %d.\t", V_FitError
+					endif
+				else	
+					success = OneGaussFitWiggle(image, x_loc[i], y_loc[i], size, wiggle)
 				endif
-			else	
-				success = OneGaussFitWiggle(image, x_loc[i], y_loc[i], size, wiggle)
 			endif
 		endif
 		
@@ -1117,9 +1136,9 @@ function Precision(image, size, x_space, y_space, space_delta, x_angle, y_angle,
 end
 
 // Gaussian fit on every image in a stack, starting from the same initial guess positions without peak finding
-function GaussianFitStack(st, x_loc, y_loc, size, wiggle [fix_xy])
+function GaussianFitStack(st, x_loc, y_loc, size, wiggle [fix_xy, no_noise])
 	wave st, x_loc, y_loc
-	variable size, wiggle, fix_xy
+	variable size, wiggle, fix_xy, no_noise
 	
 	string cur_fol = GetDataFolder(1)
 	NewDataFolder/O/S root:Packages
@@ -1137,7 +1156,11 @@ function GaussianFitStack(st, x_loc, y_loc, size, wiggle [fix_xy])
 		wave im = $"M_ImagePlane"
 		
 		if(fix_xy == 1)
-			GaussianFit(im, x_loc, y_loc, size, wiggle, fix_xy = fix_xy)
+			if(no_noise == 1)
+				GaussianFit(im, x_loc, y_loc, size, wiggle, fix_xy = fix_xy, no_noise = no_noise)
+			else
+				GaussianFit(im, x_loc, y_loc, size, wiggle, fix_xy = fix_xy)
+			endif
 		else
 			GaussianFit(im, x_loc, y_loc, size, wiggle)
 		endif

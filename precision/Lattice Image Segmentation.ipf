@@ -1,85 +1,48 @@
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
-function StackGaussFit(image_stack, x_loc, y_loc, size, wiggle, fixposYN)
-	wave image_stack, x_loc, y_loc
-	variable size, wiggle, fixposYN
-	
-	if(fixposYN)
-		printf "Fitting with fixed atom center positions not yet supported.  Exiting.\r"
-		return 0
-	endif
-	
-	Make/O/N=(DimSize(image_stack, 2)) xav, yav, xstd, ystd
-	
-	variable i
-	for(i=0; i<DimSize(image_stack, 2); i+=1)
-	//for(i=0; i<4; i+=1)
-		Imagetransform/p=(i) getplane image_stack
-		wave im = $"M_ImagePlane"
-		GaussianFit(im, x_loc, y_loc, size, wiggle)
-			
-		//save fit parameters for each atom column in each frame of stack
-		wave z0 = $"z0"
-		wave A = $"A"
-		wave x0 = $"x0"
-		wave xW = $"xW"
-		wave y0 = $"y0"
-		wave yW = $"yW"
-		wave cor = $"cor"
-		wave sigma_z0 = $"sigma_z0"
-		wave sigma_A = $"sigma_A"
-		wave sigma_x0 = $"sigma_x0"
-		wave sigma_xW = $"sigma_xW"
-		wave sigma_y0 = $"sigma_y0"
-		wave sigma_yW = $"sigma_yW"
-		wave sigma_cor = $"sigma_cor"
-		variable num_peaks = DimSize(z0,0)
+// Functions to coarse-grain a lattice image by breaking into cells, each of which contains one
+// column, then assigning each cell one intensity.  Originally developed to track black spot defects
+// in LAADF images of SiC.
+//
+// Basic usage: (1) define a set lattice positions by e.g. fitting or setting a grid.  (2) Define VoronoiCells for
+// those positions.  (3) MakeAllMasks from the Voronoi cells.  (4) Coarse-grain the image (image
+// stack) using MakeCoarseGrain (MakeCoarseGrainStack) and the appropriate MaskProc.
+//
+// VoronoiCells: from a set of identified columns positions in the image, divide the image into cells
+// using a Voronoi tesselation.  Identify the vertices that are associated with each cell.
+//
+// VoronoiVertices: take the output of the built-in Igor routine to calculate the edges of a Voronoi tessellation
+// of a set of points, and extract the vertices of the Voronoi polygons that fit entirely inside the a defined area
+// 
+// MakeAllMasks: take the identified vertices and generate a stack of mask waves.  Each wave in the stack
+// is the same size as the original image and is 1 inside a particular Voronoi polygon and one outside it.  Ideally,
+// the union of all the masks would be the area of the original image, although it doesn't quite work that way.
+//
+// PolyEdgesfromVoronoi: not used.
+//
+// AllVertNearPoints / AllVertCircuits / VertCircuit / GenerateMasks: utility routines for MakeAllMasks
+//
+// MaskCoarseGrain: take an image and a stack of masks.  Perform some operation defined in the function reference
+// MaskProc to calculate the intensity inside each mask, and collect all those intensities into a coarse-grain representation
+// of the input image.  MaskAverage is an example MaskProc.
+//
+// MaskCoarseGrainStack: same process as MaskCoarseGrain, but on every image in a stack of input images.
+//
+// ProtoMaskProc: prototype of a MaskProc.  Take an input image and a mask image.  Every MaskProc must have the
+// same arrguments as the prototype.
+//
+// MaskAverage: assign the coarse-grain region to the average value of the input image inside the each mask / Voronoi polygon
+//
+// MaskZ0: assign the coarse-grain region to the z0 background value from a fit of Gaussian peaks to the original image.
+// The Gaussian peak fit parameters enter through hard-coded global variables and global waves.
+//
+// MaskGauss: assign the coarse-grain region to the average of the Gaussian peak fitted to the original image.
+//
+// MaskGaussSub: assign the coarse-grain region to the average of the original image, minus just the peak part of the Gaussian
+// fit (not the constant z0 background part).
+//
+// v1, 12/11/14 pmv.
 
-		if (i == 0)
-			Make/O/N=(num_peaks, DimSize(image_stack, 2)) z0_stack, A_stack, x0_stack, xW_stack, y0_stack, yW_stack, cor_stack 
-			Make/O/N=(num_peaks, DimSize(image_stack, 2)) sig_z0_stack, sig_A_stack, sig_x0_stack, sig_xW_stack, sig_y0_stack, sig_yW_stack, sig_cor_stack 
-		endif
-
-		z0_stack[][i] = z0[p] 
-		A_stack[][i] = A[p] 
-		x0_stack[][i] = x0[p]  
-		xW_stack[][i] = xW[p]  
-		y0_stack[][i] = y0[p]  
-		yW_stack[][i] = yW[p]  
-		cor_stack[][i] = cor[p] 
-		sig_z0_stack[][i] = sigma_z0[p] 
-		sig_A_stack[][i] = sigma_A[p] 
-		sig_x0_stack[][i] = sigma_x0[p]  
-		sig_xW_stack[][i] = sigma_xW[p]  
-		sig_y0_stack[][i] = sigma_y0[p]  
-		sig_yW_stack[][i] = sigma_yW[p]  
-		sig_cor_stack[][i] = sigma_cor[p]  
-	
-		killwaves z0, A, x0, xW, y0, yW, cor, sigma_z0, sigma_A, sigma_x0, sigma_xW, sigma_y0, sigma_yW, sigma_cor	
-	endfor	
-	
-	
-end
-
-function StackFitUnwrap(dat, im_x, im_y)
-	wave dat
-	variable im_x, im_y
-	
-	variable nimages = DimSize(dat, 1)
-	make/o/n=(im_x, im_y, nimages) stack_unwrap
-	Make/O/n=(im_x, im_y) im_tmp
-	make/o/n=(DimSize(dat, 0)) unwrap_tmp
-	
-	variable i
-	for(i=0; i<nimages; i+=1)
-		unwrap_tmp = dat[p][i]
-		ImageTransform/D=unwrap_tmp fillImage im_tmp
-		ImageTransform/P=(i)/D=stack_unwrap setPlane im_tmp
-	endfor
-	
-	Killwaves im_tmp, unwrap_tmp
-	
-end
 
 function VoronoiCells(im, x0, y0)
 	wave im, x0, y0
@@ -242,101 +205,6 @@ function VoronoiVertices(v_edges, sx, sy, ex, ey)
 	
 end
 
-// this doesn't work
-function VerticesBondGraph(vor_vert, cut)
-	wave vor_vert
-	variable cut
-	
-	variable max_con = 6  // maximum connections allowed for each vertex
-	
-	variable nvert = DimSize(vor_vert, 0)
-	
-	Make/O/N=(nvert, nvert) pair_dist
-	
-	pair_dist = (vor_vert[p][0] - vor_vert[q][0])^2 + (vor_vert[p][1] - vor_vert[q][1])^2
-	pair_dist = sqrt(pair_dist)
-	
-	Make/O/N=100 pair_dist_Hist
-	Histogram/B={0,(2*cut/100),100} pair_dist,pair_dist_Hist
-	
-	pair_dist = (pair_dist <= cut ? 1 : 0)
-	
-	Make/O/N=(nvert, 6) vert_bonds
-	vert_bonds = NaN
-	Make/O/N=(nvert) list_tmp
-	
-	variable i, j, k
-	for(i =0; i<nvert; i+=1)
-		list_tmp = pair_dist[p][i]
-		j = 0
-		k = 0
-		do
-			FindValue/S=(j)/V=1 list_tmp
-			if(V_Value != -1)
-				j = V_value + 1
-				if(V_value != i)
-					vert_bonds[i][k] = V_value
-					k += 1
-				endif
-			endif
-		while(V_Value != -1 && j < nvert) 
-	endfor
-	
-	// Killwaves list_tmp, pair_dist
-	
-end
-
-// not used
-function AllVerticesBondCircuits(vert_bonds, max_d)
-	wave vert_bonds
-	variable max_d
-	
-	Make/O/N=(DimSize(vert_bonds, 0), max_d, max_d) bond_circuits
-	bond_circuits = NaN
-
-	variable i
-	for(i=0; i<DimSize(vert_bonds, 0); i+=1)
-		OneVertexBondCircuits(vert_bonds, max_d, i)
-	endfor
-	
-end
-
-// doesn't work
-function OneVertexBondCircuitsRecur(vert_bonds, max_d, start_vert, circuit_i, member_i, vert_i)
-	wave vert_bonds
-	variable max_d, start_vert, circuit_i, member_i, vert_i
-	
-	wave bond_circuits = $"bond_circuits"
-	
-	if(member_i >= max_d)
-		return -1
-	endif
-	if(circuit_i >= max_d)
-		return -1
-	endif
-	
-	variable j=0, new_vert, cc
-	do
-		printf "Starting on %g: circuit %g; current vertex %g; neighbor %g = %g\r", start_vert, circuit_i, vert_i, j, vert_bonds[vert_i][j]
-		if(numtype(vert_bonds[vert_i][j]))
-			return circuit_i + 1
-		endif
-		bond_circuits[start_vert][member_i][circuit_i] = vert_bonds[vert_i][j]
-		if(vert_bonds[vert_i][j] != start_vert)
-			cc = OneVertexBondCircuitsRecur(vert_bonds, max_d, start_vert, circuit_i, member_i+1, vert_bonds[vert_i][j])
-		endif
-		j+=1
-	while(1)
-	return cc
-	
-end
-
-function OneVertexBondCircuits(vert_bonds, max_d, start_vert)
-	wave vert_bonds
-	variable max_d, start_vert
-	
-	
-end
 
 function AllVertNearPoints(px, py, vert_list, nvert, tol)
 	wave px, py, vert_list
@@ -590,6 +458,47 @@ function MaskSubGauss(im, mask)
 
 		Duplicate/o mask mask_av_tmp
 		mask_av_tmp = (mask[p][q] == 1 ? (im[p][q] - Gauss2D(W_coef, x, y) + z0_st[mask_i][stack_i]) : 0)
+		WaveStats/M=1/Q mask_av_tmp
+		variable im_av = V_avg
+
+		WaveStats/M=1/Q mask
+		variable mask_av = V_avg
+		im = (mask[p][q] == 0 ? 0 : (im_av / mask_av) )
+	
+		Killwaves mask_av_tmp
+
+	endif	
+
+end
+
+function MaskGauss(im, mask)
+	wave im, mask
+
+	NVAR mask_i = $"mask_i"
+	NVAR stack_i = $"stack_i"
+
+	wave z0_st = $"z0_st"
+	wave A_st = $"A_st"
+	wave cor_st = $"cor_st"
+	wave x0_st = $"x0_st"
+	wave y0_st = $"y0_st"
+	wave xW_st = $"xW_st"
+	wave yW_st = $"yW_st"
+
+	if(numtype(z0_st[mask_i][stack_i]))
+		im = (mask[p][q] == 1 ? NaN : 0)
+	else
+		Make/O/N=7 W_Coef
+		W_Coef[0] = z0_st[mask_i][stack_i]
+		W_Coef[1] = A_st[mask_i][stack_i]
+		W_Coef[2] = x0_st[mask_i][stack_i]
+		W_Coef[3] = xW_st[mask_i][stack_i]
+		W_Coef[4] = y0_st[mask_i][stack_i]
+		W_Coef[5] = yW_st[mask_i][stack_i]
+		W_Coef[6] = cor_st[mask_i][stack_i]
+
+		Duplicate/o mask mask_av_tmp
+		mask_av_tmp = (mask[p][q] == 1 ? Gauss2D(W_coef, x, y)  : 0)
 		WaveStats/M=1/Q mask_av_tmp
 		variable im_av = V_avg
 

@@ -71,7 +71,11 @@
 // 10/11/12:  Added OneGaussFitWiggle, modified GaussianFit to use it, and modified other calls to GaussianFit for consistency, pmv.
 // 6/22/13: Modified GaussianFit and OneGaussFitWiggle to discard fits that fail to converge or have a center outside the fit box.  pmv
 // 12/5/14: Added GaussianFitStack: find Gaussian atom fit parameters for every image in a series.  pmv
-
+// 12/5/14: Added option to fit to fixed atom center position to GaussianFit for use in GaussianFitStack.  pmv
+// 12/9/14: modify PeakPositions to use the current data folder, not hard-coded for root data folder.  pmv
+// 12/11/14: added StackMean.  Very similar to SumIntensity.  pmv
+// 12/11/14: added "no noise" optional parameter for GaussianFit and GaussianFitStack.  Useful for images with negative pixels, which
+// otherwise are NaN in the sqrt(N) noise image and generate errors from the fit code.  pmv.
 
 // This function converts images in counts to electrons
 // inputs: original image in HAADF counts, numSamples, and cm = average count in HAADF probe image,
@@ -251,9 +255,14 @@ function PeakPositions(image)
 	//ImageThreshold/I/M=(0)/Q/T=22500 image
 	//ImageAnalyzeParticles /E/W/Q/F/M=3/A=1/EBPC stats, root:M_ImageThresh
 	
+	// Add ROI to ignore pixels in input image that are NaN
+	duplicate/O image roi_tmp
+	Redimension/b/u roi_tmp
+	roi_tmp = numtype(image)
+	
 	//Auto Threshold
-	ImageThreshold/I/M=(1)/Q image
-	ImageAnalyzeParticles /E/W/Q/F/M=3/A=15/EBPC stats, root:M_ImageThresh
+	ImageThreshold/I/M=(1)/Q/R={roi_tmp, 2} image
+	ImageAnalyzeParticles /E/W/Q/F/M=3/A=15/EBPC stats, M_ImageThresh
 	
 	duplicate/O W_xmin x_loc	
 	duplicate/O W_ymin y_loc
@@ -270,6 +279,8 @@ function PeakPositions(image)
 	
 	killwaves W_ImageObjArea, W_SpotX, W_SpotY, W_circularity, W_rectangularity, W_ImageObjPerimeter, M_Moments, M_RawMoments
 	killwaves W_BoundaryX, W_BoundaryY, W_BoundaryIndex, W_xmin, W_xmax, W_ymin, W_ymax, xmin, xmax, ymin, ymax
+	Killwaves roi_tmp
+	Killwaves M_ImageTresh, M_Particle
 end
 
 
@@ -336,10 +347,10 @@ end
 // This function fits the peak positions that are in x_loc and y_loc that were found in the previous routine.
 // This only works for 2D Gaussian fits. Si dumbbells need a different fitting routine.
 // Inputs: image, x_loc, y_loc, and gaussian fit size x size.
-function GaussianFit(image, x_loc, y_loc, size, wiggle)
+function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy, no_noise])
 	
 	wave image, x_loc, y_loc
-	variable size, wiggle
+	variable size, wiggle, fix_xy, no_noise
 	variable half_size = size / 2
 	variable num_peaks = DimSize(x_loc,0)
 	variable success, V_FitError
@@ -359,24 +370,57 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle)
 
 	Make/O/N=(num_peaks) z0, A, x0, xW, y0, yW, cor
 	Make/O/N=(num_peaks) sigma_z0, sigma_A, sigma_x0, sigma_xW, sigma_y0, sigma_yW, sigma_cor
+	Make/O/N=6 W_Coef, W_Sigma
 
 	variable i
 	for(i=0; i<num_peaks; i+=1)
 		
 		success = 1
-		if(wiggle == 0)
-			V_FitError =0
-			CurveFit/M=2/W=2/Q gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D
-			if(V_FitError)
+		if(fix_xy == 1)  // fit with held x and y center positions
+			if(wiggle == 0)
+				if(no_noise == 1)  // leave out Poisson noise weighting from the fit
+					V_FitError = 0
+					CurveFit/M=2/W=2/Q/O gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]]  /I=1 /D  // generate initial guesses
+					W_Coef[2] = x_loc[i]  // replace guessed (x,y) position with fixed position
+					W_Coef[4] = y_loc[i]
+					CurveFit/M=2/W=2/Q/H="0010100" gauss2D, kwCWave = W_Coef, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /I=1 /D  // do the fit
+					if(V_FitError)
+						success = 0
+						printf "V_FitError = %d.\t", V_FitError
+					endif
+				else
+					V_FitError = 0
+					CurveFit/M=2/W=2/Q/O gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // generate initial guesses
+					W_Coef[2] = x_loc[i]  // replace guessed (x,y) position with fixed position
+					W_Coef[4] = y_loc[i]
+					CurveFit/M=2/W=2/Q/H="0010100" gauss2D, kwCWave = W_Coef, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D  // do the fit
+					if(V_FitError)
+						success = 0
+						printf "V_FitError = %d.\t", V_FitError
+					endif
+				endif
+			else
+				printf "Fixed (x,y) atom center position & wiggle fit not yet implemented.\r"
 				success = 0
-				printf "V_FitError = %d.\t", V_FitError
-			endif
-		else	
-			success = OneGaussFitWiggle(image, x_loc[i], y_loc[i], size, wiggle)
-		endif
+			endif				
 		
-		wave W_coef = $"W_coef"
-		wave W_sigma = $"W_sigma"
+		else
+			if(no_noise == 1)
+				printf "Fitting without noise and without fixed (x,y) position is not implemented yet.\r"
+				success = 0
+			else		
+				if(wiggle == 0)
+					V_FitError =0
+					CurveFit/M=2/W=2/Q gauss2D, image[x_start[i],x_finish[i]][y_start[i],y_finish[i]] /W=noise /I=1 /D
+					if(V_FitError)
+						success = 0
+						printf "V_FitError = %d.\t", V_FitError
+					endif
+				else	
+					success = OneGaussFitWiggle(image, x_loc[i], y_loc[i], size, wiggle)
+				endif
+			endif
+		endif
 		
 		if(W_coef[2] <= x_start[i] || W_coef[2] >= x_finish[i])
 			printf "x0 out of range.\t"
@@ -422,7 +466,7 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle)
 
 	endfor	
 
-	//killwaves W_sigma, W_coef, M_covar
+	killwaves W_sigma, W_coef, M_covar, x_finish, x_start, y_finish, y_start, noise
 end
 
 
@@ -1092,9 +1136,9 @@ function Precision(image, size, x_space, y_space, space_delta, x_angle, y_angle,
 end
 
 // Gaussian fit on every image in a stack, starting from the same initial guess positions without peak finding
-function GaussianFitStack(st, x_loc, y_loc, size, wiggle)
+function GaussianFitStack(st, x_loc, y_loc, size, wiggle [fix_xy, no_noise])
 	wave st, x_loc, y_loc
-	variable size, wiggle
+	variable size, wiggle, fix_xy, no_noise
 	
 	string cur_fol = GetDataFolder(1)
 	NewDataFolder/O/S root:Packages
@@ -1111,7 +1155,15 @@ function GaussianFitStack(st, x_loc, y_loc, size, wiggle)
 		ImageTransform/P=(i) getplane st
 		wave im = $"M_ImagePlane"
 		
-		GaussianFit(im, x_loc, y_loc, size, wiggle)
+		if(fix_xy == 1)
+			if(no_noise == 1)
+				GaussianFit(im, x_loc, y_loc, size, wiggle, fix_xy = fix_xy, no_noise = no_noise)
+			else
+				GaussianFit(im, x_loc, y_loc, size, wiggle, fix_xy = fix_xy)
+			endif
+		else
+			GaussianFit(im, x_loc, y_loc, size, wiggle)
+		endif
 		
 		wave z0 = $"z0"
 		wave A = $"A"
@@ -1148,19 +1200,19 @@ function GaussianFitStack(st, x_loc, y_loc, size, wiggle)
 	killwaves z0, A, x0, xW, y0, yW, cor, sigma_z0, sigma_A, sigma_x0, sigma_xW, sigma_y0, sigma_yW, sigma_cor	
 	
 	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
-	Duplicate/O z0_st $(cur_fol+"z0_st")
+	Duplicate/O A_st $(cur_fol+"A_st")
+	Duplicate/O x0_st $(cur_fol+"x0_st")
+	Duplicate/O xW_st $(cur_fol+"xW_st")
+	Duplicate/O y0_st $(cur_fol+"y0_st")
+	Duplicate/O yW_st $(cur_fol+"yW_st")
+	Duplicate/O cor_st $(cur_fol+"cor_st")
+	Duplicate/O sig_z0_st $(cur_fol+"sig_z0_st")
+	Duplicate/O sig_A_st $(cur_fol+"sig_A_st")
+	Duplicate/O sig_x0_st $(cur_fol+"sig_x0_st")
+	Duplicate/O sig_xW_st $(cur_fol+"sig_xW_st")
+	Duplicate/O sig_y0_st $(cur_fol+"sig_y0_st")
+	Duplicate/O sig_yW_st $(cur_fol+"sig_yW_st")
+	Duplicate/O sig_cor_st $(cur_fol+"sig_cor_st")
 	
 	SetDataFolder $cur_fol
 	
@@ -1824,5 +1876,24 @@ function SumIntensity(image_stack)
 	
 	endfor
 
-killwaves M_ImagePlane, M_WaveStats
+	killwaves M_ImagePlane, M_WaveStats
+end
+
+// takes an image series (stack) and calculates the mean of each image.
+// Places the results in stack_mean.
+function StackMean(st)
+	wave st
+	
+	make/o/n=(DimSize(st, 2)) stack_mean
+	
+	variable i
+	for(i=0; i<DimSize(st, 2); i+=1)
+		Imagetransform/P=(i) getplane st
+		wave pl = $"M_ImagePlane"
+		wavestats/q/m=1 pl
+		stack_mean[i] = V_avg
+	endfor
+	
+	Killwaves pl
+	
 end

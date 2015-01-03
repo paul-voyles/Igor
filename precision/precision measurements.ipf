@@ -79,10 +79,10 @@
 
 // This function converts images in counts to electrons
 // inputs: original image in HAADF counts, numSamples, and cm = average count in HAADF probe image,
-// c0 = average count HAADF dark image, p = probe current, t = pixel dwell time.
-function CountstoElectrons(average, numSamples, cm, c0, p, t)
+// c0 = average count HAADF dark image, p = probe current in electrons/sec, t = pixel dwell time in seconds.
+function CountstoElectrons(average, cm, c0, p, t)
 	
-	wave average, numSamples 
+	wave average 
 	variable cm, c0 , p, t
 
 

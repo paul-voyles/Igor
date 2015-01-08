@@ -18,8 +18,8 @@ function STEMDistortionStack(im, steps)
 	variable steps
 	
 	// parameters describing the image series
-	variable nx = 256, ny = 256, npix = nx*ny
-	variable x0=22.0, y0=20.0
+	variable nx = 128, ny = 128, npix = nx*ny
+	variable x0=10.112, y0=10.112			// starting point in the full frame for the resampled sub-frame
 	variable dwell = 16e-6 				// pixel dwell time in seconds
 	variable flyback = 60e-6 			// line flyback time in seconds
 	variable interframe = 1e-3 			// frame-to-frame delay time in seconds
@@ -40,7 +40,10 @@ function STEMDistortionStack(im, steps)
 	// single in principle goes up to frequency = 1/(2*dwell) ~ 30 kHz.
 	Make/o/N=(6) freq, mag
 	freq = {30, 120, 160, 430, 1000, 2725}
-	mag = {0.015, 0.01, 0.007, 0.004, 0.004, 0.004}
+	mag = {0.015, 0.01, 0.007, 0.004, 0.004, 0.004}  // distortions based on UW-Titan measurements
+	
+	// mag = {0.05, 0.01, 0.007, 0.01, 0.004, 0.004}  // much larger distortions
+
 	
 	// other useful variables
 	variable dx = DimDelta(im, 0), dy = DimDelta(im, 1)
@@ -83,7 +86,7 @@ function STEMDistortionStack(im, steps)
 	ResampleFrames(im, nx, ny, steps, cum_sx, cum_sy)
 	wave resample_st = $"resample_st"
 	
-	duplicate resample_st resample_st_pn
+	duplicate/o resample_st resample_st_pn
 	resample_st *= dose_per_pixel
 	
 	// add Poisson noise

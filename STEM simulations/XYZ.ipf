@@ -6,8 +6,6 @@
 // added RDF, pmv 06-30-06
 // added PartialRDF, split RDF and RDFWork, pmv 06-07-06
 // added SaveCIF, ZtoSymbol, pmv 01-14-10
-// added SymboltoZ, RotModel90, and IsoBtoKirklandU, pmv 06-23-14
-
 
 function SetCell(xyz, ax, by, cz)
 	wave xyz
@@ -194,33 +192,6 @@ end
 function/S ZtoSymbol(znum)
 	variable znum
 	
-	MakeZSymList()
-	wave/T ZtoSymbol_work = $"ZtoSymbol_work"
-
-	string ret = ZtoSymbol_work[znum]
-	
-	Killwaves ZtoSymbol_work
-
-	return ret
-	
-end
-
-function SymboltoZ(sym)
-	string sym
-	
-	MakeZSymList()
-	wave/T ZtoSymbol_work = $"ZtoSymbol_work"
-	Make/o/n=109 SymtoZ_tmp
-	SymtoZ_tmp = (!cmpstr(sym, ZtoSymbol_work[p]) ? 1 : 0)
-	wavestats/q SymtoZ_tmp
-	Killwaves ZtoSymbol_work, SymtoZ_tmp
-	
-	return V_maxloc
-
-end	
-	
-function MakeZSymList()
-
 	make/o/n=(110)/t ZtoSymbol_work
 	ZtoSymbol_work[0,18] = {"no", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar"}
 	ZtoSymbol_work[19, 37] = {"K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb"}
@@ -229,7 +200,13 @@ function MakeZSymList()
 	ZtoSymbol_work[77,96] = {"Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm"}
 	ZtoSymbol_work[97,109] = {"Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt"}
 
-end	
+	string ret = ZtoSymbol_work[znum]
+	
+	Killwaves ZtoSymbol_work
+
+	return ret
+	
+end
 
 function SaveXYZNoSortZ(name, xyz)
 	string name
@@ -812,113 +789,5 @@ function SortByAtomicNum(atoms)
 	atoms[][5] = vib[p]
 	
 	Killwaves zatom, xx, yy, zz, occ, vib
-	
-end
-
-function Rescale(xyz, frac)
-	wave xyz
-	variable frac
-	
-	Duplicate xyz xyz_rs
-	Recenter(xyz_rs, 0, 0, 0)
-	xyz_rs[][1] = frac*xyz[p][1]
-	xyz_rs[][2] = frac*xyz[p][2]
-	xyz_rs[][3] =frac*xyz[p][3]
-	
-	SetCell(xyz_rs, frac*GetAX(xyz), frac*GetBY(xyz), frac*GetCZ(xyz))
-	
-	Recenter(xyz_rs, 0.5, 0.5, 0.5)
-	
-	SizeXYZ(xyz_rs)
-	
-end
-
-
-function Composition(xyz)
-	wave xyz
-	
-	variable natom = DimSize(xyz, 0)
-	make/o/n=(natom) zatom
-	zatom = xyz[p][0]
-	
-	Sort zatom, zatom
-	
-	make/o/n=(1, 2) comp_count
-	comp_count[0][0] = zatom[1]
-	comp_count[0][1] = 1
-	
-	variable i
-	for(i=1; i<natom; i+=1)
-	
-		if(comp_count[0][0] == zatom[i])
-			comp_count[0][1] += 1
-		else
-			InsertPoints/M=0 0, 1, comp_count
-			comp_count[0][0] = zatom[i]
-			comp_count[0][1] = 1
-		endif
-		
-	endfor
-	
-	printf "%d total atoms\r", natom
-	for(i=0; i<DimSize(comp_count, 0); i+=1)
-		printf "Z = %d, %d atoms, %g  %", comp_count[i][0], comp_count[i][1], 100*comp_count[i][1] / natom
-		printf " composition.\r"
-	endfor
-	
-	Killwaves zatom, comp_count
-	
-end
-	
-// Creates a model m_rot with the input model rotated 90 deg about the designated axis, then recentered at (1/2 1/2 1/2)	
-function RotModel90(m, axis)
-	wave m
-	variable axis
-	
-	duplicate/O m m_rot
-	duplicate/O m m_rot_tmp
-	
-	Recenter(m_rot_tmp, 0, 0, 0)
-	
-	switch(axis)
-	
-		case 1:  // rotation about x axis
-			m_rot[][1] = m_rot_tmp[p][1]
-			m_rot[][2] = m_rot_tmp[p][3]
-			m_rot[][3] = -1.0*m_rot_tmp[p][2]
-			SetCell(m_rot, GetAX(m), GetCZ(m), GetBY(m))		
-		break
-		
-		case 2: // rotation about y axis
-			m_rot[][1] = m_rot_tmp[p][3]
-			m_rot[][2] = m_rot_tmp[p][2]
-			m_rot[][3] = -1.0*m_rot_tmp[p][1]
-			SetCell(m_rot, GetCZ(m), GetBY(m), GetAX(m))		
-		break
-		
-		case 3: // rotation about z axis
-			m_rot[][1] = m_rot_tmp[p][2]
-			m_rot[][2] = -1.0*m_rot_tmp[p][1]
-			m_rot[][3] = m_rot_tmp[p][3]
-			SetCell(m_rot, GetBY(m), GetAX(m), GetCZ(m))		
-		break
-		
-		default:
-			printf "Error.  Axis must be 1, 2, or 3, current value %g\r", axis
-			killwaves m_rot, m_rot_tmp
-			return 0			
-	endswitch
-	
-	Recenter(m_rot, 0.5, 0.5, 0.5)
-	Killwaves m_rot_tmp
-	
-end
-	
-// translate temperature parameter B, in Angstrom^2 from CIF file (e.g. from ICSD) into 
-// rms displacement value in Angstrom needed by Kirkland multislice
-function IsoBtoKirklandU(B)
-	variable B
-	
-	return sqrt(B / (8*Pi^2))
 	
 end

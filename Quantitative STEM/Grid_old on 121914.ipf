@@ -1,29 +1,20 @@
 #pragma rtGlobals=1		// Use modern global access method.
 // Created/updated on 12/8/14.  ABY
 //
-// These functions are for calculating average lattice paramters, creating perfect 2D lattices of atomic column positions from those 
-// parameters, and fitting the perfect lattices to experimental lattices by minimizing the rms between all the points.
-//
-// 12-09-14 Added checking for a few more assumed pre-existing waves; modified SortGrid to not return fitted atom positions if
-// matching grid atoms are not found.  pmv
-// 12-09-14 Modified BasisParameters and CreateGridWithBasis to allow any number of basis atoms, not just one.  pmv
-// 12-10-14 bug fix for number of atoms in CreateGridWithBasis. pmv
-// 12-10-14 change CreateGridWithBasis to shift the created grid to the center of the atom positions, then shift to the nearest matching
-// grid / atom pair.  pmv
+// These functions are for calculating average lattice paramters, creating perfect 2D lattices of atomic column positions from those parameters, and fitting the perfect lattices to 
+// experimental lattices by minimizing the rms between all the points.
 
 
-// This functions finds the average lattice parameters(a,b) of a two-dimensional grid of atomic columns positions with only 1 atom basis
-// listed in x0 and y0. 
+
+// This functions finds the average lattice parameters(a,b) of a two-dimensional grid of atomic columns positions with only 1 atom basis listed in x0 and y0. 
 // The order of the atoms positions in the x0, y0 list of atom positions can be in any order, but x0[i] must correspond to y0[i].
-// a_space and b_space are guesses of what the seperations are for the lattice paramters. space_delta is the +/- separation error window
-// for the selection process. 
+// a_space and b_space are guesses of what the seperations are for the lattice paramters. space_delta is the +/- separation error window for the selection process. 
 // a_angle and b_angle are guesses for the angles of the lattice parameters. angle_delta is the +/- angle error window for the selection process. 
 // horizantal is 0 degrees. straight down is -90 degrees.
 // +/- 10% seems to work for the space_delta and angle_delta.
 // outputed is ax, ay, bx, and by, which are the x and y components of all the found interatomic separations.
 // outputed is a_param and b_param. row 0 = average ax or bx. row 1 = average ay or by, row 2 = average angle.
 // the average values and number of separations found are printed in the history. 
-// lattice parameters and angles must be in positive x and positive y; may mean angle is negative
 function GridParameters(x0, y0, a_space, b_space, space_delta, a_angle, b_angle, angle_delta)
 
 	wave x0, y0
@@ -154,52 +145,24 @@ function BasisParameters(x0, y0, c_space, space_delta, c_angle, angle_delta)
 		endfor
 	endfor
 
-	if(numpnts(cx) > 0)
+	// calculate and save the b parameters
+	wavestats/Q/W cx
+	wave M_WaveStats = $"M_WaveStats"
+	variable cx_average = M_WaveStats(3)
+	variable cx_stdev = M_WaveStats(4)
+	wavestats/Q/W cy
+	wave M_WaveStats = $"M_WaveStats"
+	variable cy_average = M_WaveStats(3)
+	variable cy_stdev = M_WaveStats(4)
+	make/o/n=3 c_param
+	c_param[0] = cx_average
+	c_param[1] = cy_average
+	c_param[2] = atan(cy_average/cx_average) * 180 / Pi
+	print "c lattice basis in ( x , y , angle ) = (", c_param[0], ",", c_param[1], ",", c_param[2], ") and found", dimsize(cx,0), "seperations."
 	
-		// calculate and save the c parameters
-		wavestats/Q/W cx
-		wave M_WaveStats = $"M_WaveStats"
-		variable cx_average = M_WaveStats(3)
-		variable cx_stdev = M_WaveStats(4)
-		wavestats/Q/W cy
-		wave M_WaveStats = $"M_WaveStats"
-		variable cy_average = M_WaveStats(3)
-		variable cy_stdev = M_WaveStats(4)
-
-		wave c_param = $"c_param"
-		if(!WaveExists(c_param))
-			make/o/n=(3, 1) c_param
-		else
-			InsertPoints/M=1 0, 1, c_param
-		endif
-
-		c_param[0][0] = cx_average
-		c_param[1][0] = cy_average
-		c_param[2][0] = atan(cy_average/cx_average) * 180 / Pi
-		print "c lattice basis in ( x , y , angle ) = (", c_param[0], ",", c_param[1], ",", c_param[2], ") and found", dimsize(cx,0), "seperations."
-		killwaves M_WaveStats
-	
-	else
-		printf "No matching interatomic distances found within tolerances.\r"
-	endif
-	
+	killwaves M_WaveStats
 end
 
-
-// print the vector in (length, angle) parameter space from point (x1, x2) to (y1, y2).  Use with hcsr() and vcsr() functions to define
-// vectors on an image - EstimateVector(hcsr(A), hcsr(B), vcsr(A), vcsr(B))
-function EstimateVector(x1, x2, y1, y2)
-	variable x1, x2, y1, y2
-
-	variable xm, ym, d, angle
-	xm = (x1 - x2)
-	ym = (y1 - y2)
-	d = sqrt((xm^2) + (ym^2))
-	angle = atan(ym/xm) * 180 / Pi
-
-	printf "Vector from point (%g, %g) to (%g, %g) is d = %g, angle = %g\r", x1, x2, y1, y2, d, angle
-
-end
 
 // This function creates a perfect 2D lattice of positions from what is in a_param and b_param. 
 // This function only creates a 2D lattice with a 1 atom basis.
@@ -231,8 +194,8 @@ function CreateGrid(na, nb)
 	k=0
 	for(i=0; i<na; i+=1)
 		for(j=0; j<nb; j+=1)
-			x_lat[k] = (i * tmp_a_param[0]) + (j * tmp_b_param[0])
-			y_lat[k] = (i * tmp_a_param[1]) + (j * tmp_b_param[1])
+			x_lat[k] = (i * tmp_a_param(0)) + (j * tmp_b_param(0))
+			y_lat[k] = (i * tmp_a_param(1)) + (j * tmp_b_param(1))
 			k = k+1
 		endfor
 	endfor
@@ -268,164 +231,67 @@ end
 // This function automatically initializes(shifts) the position of the gird so that the atom position closest to (0,0) in (x_lat, y_lat) is equal to the atom position closest to (0,0) in (x0, y0).
 // This function also automatically sorts x_lat and y_lat so that (x_lat[i], y_lat[i]) corresponds to the same atom position (i) in x0, y0. These soted outputs are found in x_lat_sort, y_lat_sort.
 function CreateGridWithBasis(na, nb)
+
 	variable na, nb
+	variable numatoms = na * nb * 2
 
 	//open parameter waves
 	wave tmp_a_param = $"a_param"
 	wave tmp_b_param = $"b_param"
 	wave tmp_c_param = $"c_param"
-	wave x0 = $"x0"
-	wave y0 = $"y0"
-
-	if(!waveexists(tmp_a_param))
-		print "You are an idoit, a_param doesn't exist.\r"
-		return 0
-	endif
-	if(!waveexists(tmp_b_param))
-		print "You are an idoit, b_param doesn't exist.\r"
-		return 0
-	endif
-	if(!waveexists(tmp_c_param))
-		print "You are an idoit, c_param doesn't exist.\r"
-		return 0
-	endif
-	if(!waveexists(x0))
-		print "Cannot find wave x0.  Exiting.\r"
-		return 0
-	endif
-	if(!waveexists(y0))
-		print "Cannot find wave y0.  Exiting.\r"
-		return 0
-	endif
+		if(!waveexists(tmp_a_param))
+			print "You are an idoit, a_param doesn't exist.\r"
+			return 0
+		endif
+		if(!waveexists(tmp_b_param))
+			print "You are an idoit, b_param doesn't exist.\r"
+			return 0
+		endif
+		if(!waveexists(tmp_c_param))
+			print "You are an idoit, c_param doesn't exist.\r"
+			return 0
+		endif
 	
-	
-	variable numbasis = DimSize(tmp_c_param, 1)
-	variable numatoms = na * nb * (numbasis+1)
-
 	Make/o/n=(numatoms) y_lat, x_lat
-	x_lat = 0
-	y_lat = 0
 	
 	//populate lattice with a and b parameters with the c basis
-	variable i, j, k, l
-	l = 0
+	variable i, j, k
+	k=0
 	for(i=0; i<na; i+=1)
 		for(j=0; j<nb; j+=1)
-			x_lat[l] = (i * tmp_a_param[0]) + (j * tmp_b_param[0])
-			y_lat[l] = (i * tmp_a_param[1]) + (j * tmp_b_param[1])
-			l += 1
-			for(k=0; k<numbasis; k+=1)
-				x_lat[l] = x_lat[l-(k+1)] + tmp_c_param[0][k]
-				y_lat[l] = y_lat[l-(k+1)] + tmp_c_param[1][k]
-				l+=1
-			endfor
+			x_lat[k] = (i * tmp_a_param(0)) + (j * tmp_b_param(0))
+			y_lat[k] = (i * tmp_a_param(1)) + (j * tmp_b_param(1))
+			x_lat[k+1] = x_lat[k] + tmp_c_param(0)
+			y_lat[k+1] = y_lat[k] + tmp_c_param(1)
+			k = k+2
 		endfor
 	endfor
 	
+	wave x0 = $"x0"
+	wave y0 = $"y0"
 	
-	// shift the calculated grid to cover the same range of coordinates as the fitted atom positions
-	// then to exactly overlap with one particular atom
-	variable x0_mid, y0_mid
-	variable gridx_mid, gridy_mid
+	//calculate the position in x0, y0 that is closest to the origin to which x_lat and y_lat will be initialized
+	variable x_initial, y_initial =10000000
+	variable initial_distance = sqrt((x_initial^2) + (y_initial^2))
+	variable distance
+	i=0
+	for(i=0; i<DimSize(x0,0); i+=1)
+		distance = sqrt((x0[i]^2) + (y0[i]^2))
+		if(distance < initial_distance)
+			x_initial = x0[i]
+			y_initial = y0[i]
+			initial_distance = distance
+		endif
+	endfor
 	
-	wavestats/q/M=0 x0
-	x0_mid = (V_max + V_min)/2
-	wavestats/q/M=0 y0
-	y0_mid = (V_max + V_min)/2
-	wavestats/q/M=0 x_lat
-	gridx_mid = (V_max + V_min)/2
-	wavestats/q/M=0 y_lat
-	gridy_mid = (V_max + V_min)/2
-	
-	// rough center the grid on the atom positions
-	x_lat = x_lat + (x0_mid - gridx_mid)
-	y_lat = y_lat + (y0_mid - gridy_mid)
-
-	// now find the closest grid / atom pair
-	Make/O/N=(numpnts(x_lat), numpnts(x0)) dist_t
-	dist_t = (x_lat[p] - x0[q])^2 + (y_lat[p] - y0[q])^2
-	wavestats/q/M=0 dist_t
-	variable shift_x = x0[V_minColLoc] - x_lat[V_minRowLoc]
-	variable shift_y = y0[V_minColLoc] - y_lat[V_minRowLoc]
-	x_lat = x_lat + shift_x
-	y_lat = y_lat + shift_y
-		
-	// Sort x_lat and y_lat waves to be in same order as x0 and y0. outputs are x_lat_sort and y_lat_sort
+	//Initialize x_lat and y_lat
+	InitializeGrid(x_lat, y_lat, x_initial, y_initial)
+	//Sort x_lat and y_lat waves to be in same aroder as x0 and y0. outputs are x_lat_sort and y_lat_sort
 	SortGrid(x_lat, y_lat, x0, y0, 2)
 	
-	Killwaves dist_t
-	
 end
 
 
-// grid with starting point.  (sx ,sy) is the origin for the lattice.  However, it runs from sa to sa+na unit cells
-// along the a parameter and sb to sb+nb along the b parameter.  Uses global waves a_param, b_param, and 
-// c_param.
-function CreateGridFromPoint(sx, sy, sa, sb, na, nb)
-	variable sx, sy, sa, sb, na, nb
-	
-	//open parameter waves
-	wave tmp_a_param = $"a_param"
-	wave tmp_b_param = $"b_param"
-	wave tmp_c_param = $"c_param"
-	wave x0 = $"x0"
-	wave y0 = $"y0"
-
-	if(!waveexists(tmp_a_param))
-		print "You are an idoit, a_param doesn't exist.\r"
-		return 0
-	endif
-	if(!waveexists(tmp_b_param))
-		print "You are an idoit, b_param doesn't exist.\r"
-		return 0
-	endif
-	if(!waveexists(tmp_c_param))
-		print "You are an idoit, c_param doesn't exist.\r"
-		return 0
-	endif
-	if(!waveexists(x0))
-		print "Cannot find wave x0.  Exiting.\r"
-		return 0
-	endif
-	if(!waveexists(y0))
-		print "Cannot find wave y0.  Exiting.\r"
-		return 0
-	endif
-	
-	
-	variable numbasis = DimSize(tmp_c_param, 1)
-	variable numatoms = na * nb * (numbasis+1)
-
-	Make/o/n=(numatoms) y_lat, x_lat
-	x_lat = 0
-	y_lat = 0
-	
-	// adjust starting points for non-zero sa, sb
-	sx += sa*tmp_a_param[0] + sb*tmp_b_param[0]
-	sy += sa*tmp_a_param[1] + sb*tmp_b_param[1]
-	
-	//populate lattice with a and b parameters with the c basis
-	variable i, j, k, l
-	l = 0
-	for(i=0; i<na; i+=1)
-		for(j=0; j<nb; j+=1)
-			x_lat[l] = sx + (i * tmp_a_param[0]) + (j * tmp_b_param[0])
-			y_lat[l] = sy + (i * tmp_a_param[1]) + (j * tmp_b_param[1])
-			l += 1
-			for(k=0; k<numbasis; k+=1)
-				x_lat[l] = x_lat[l-(k+1)] + tmp_c_param[0][k]
-				y_lat[l] = y_lat[l-(k+1)] + tmp_c_param[1][k]
-				l+=1
-			endfor
-		endfor
-	endfor
-	
-	// Sort x_lat and y_lat waves to be in same order as x0 and y0. outputs are x_lat_sort and y_lat_sort
-	// allowable error is set to 20% of the shorter lattice parameter.
-	variable err = 0.2*min( sqrt(tmp_a_param[0]^2 + tmp_a_param[1]^2), sqrt(tmp_b_param[0]^2 + tmp_b_param[1]^2) )
-	SortGrid(x_lat, y_lat, x0, y0, err)	
-	
-end
 
 // This function shifts the entire prefect lattice in x_lat, y_lat by shifting (x_lat[0], y_lat[0]) to the position (x_initial, y_initial)
 function InitializeGrid(x_lat, y_lat, x_initial, y_initial)
@@ -449,15 +315,13 @@ function SortGrid(x_lat, y_lat, x0, y0, error)
 	variable error
 	
 	variable npts = numpnts(x0)
-	variable nlat = numpnts(x_lat)
-	make/o/n=(npts) x_lat_sort, y_lat_sort
-	x_lat_sort = NaN
-	y_lat_sort = NaN
+	Duplicate/o x0, x_lat_sort
+	Duplicate/o y0, y_lat_sort
 	
 	variable count = 0
 	variable i, j = 0
 	for(i=0; i<npts; i+=1)
-		for(j=0; j<nlat; j+=1)
+		for(j=0; j<npts; j+=1)
 			if(x_lat[j] > (x0[i]-error) && x_lat[j] < (x0[i]+error))
 				if(y_lat[j] > (y0[i]-error) && y_lat[j] < (y0[i]+error))
 					x_lat_sort[i] = x_lat[j]
@@ -470,137 +334,6 @@ function SortGrid(x_lat, y_lat, x0, y0, error)
 	print "sorting process correctly found ", count, "of ", npts, "atoms columns"
 end
 
-function TruncateGrid(xs, xe, ys, ye, xl, yl)
-	variable xe, xs, ye, ys
-	wave xl, yl
-	
-	Duplicate/O xl x_lat_trunc
-	Duplicate/O yl y_lat_trunc
-	
-	Sort x_lat_trunc, x_lat_trunc, y_lat_trunc
-
-	FindLevel/Q/P x_lat_trunc, xs
-	if(!V_Flag)
-		DeletePoints 0, V_LevelX-1, x_lat_trunc, y_lat_trunc
-	endif
-	
-	FindLevel/Q/P x_lat_trunc, xe
-	if(!V_Flag)
-		DeletePoints V_LevelX, numpnts(x_lat_trunc), x_lat_trunc, y_lat_trunc
-	endif
-	
-	Sort y_lat_trunc, x_lat_trunc, y_lat_trunc
-
-	FindLevel/Q/P y_lat_trunc, ys
-	if(!V_Flag)
-		DeletePoints 0, V_LevelX-1, x_lat_trunc, y_lat_trunc
-	endif
-	
-	FindLevel/Q/P y_lat_trunc, ye
-	if(!V_Flag)
-		DeletePoints V_LevelX, numpnts(x_lat_trunc), x_lat_trunc, y_lat_trunc
-	endif
-	
-	
-end
-
-
-
-function ShiftScaleRMS(x1, y1, x0, y0, shift_range, shift_nmpnts, scale_range, scale_nmpnts)
-	
-	wave x1, y1, x0, y0
-	variable shift_range, shift_nmpnts, scale_range, scale_nmpnts
-	
-	duplicate/o x1, x1_tmp1
-	duplicate/o x1, x1_tmp2
-	duplicate/o x1, x1_final
-	duplicate/o y1, y1_tmp1
-	duplicate/o y1, y1_tmp2
-	duplicate/o y1, y1_final
-	duplicate/o x1, diff
-	
-	variable shift_step = shift_range/shift_nmpnts
-	variable scale_step = scale_range/scale_nmpnts
-	
-	//determine x1 and y1 stats for proper scaling
-	Wavestats/q x1 
-	variable x1_min = V_min
-	variable x1_max = V_max
-	variable x1_mid = (V_max + V_min)/2
-	Wavestats/q y1
-	variable y1_min = V_min
-	variable y1_max = V_max
-	variable y1_mid = (V_max + V_min)/2
-	
-	//determine center atom column
-	variable mid_location, mid_x, mid_y, dist_sqr, dist_sqr_tmp
-	dist_sqr=50
-	variable k=0
-	for(k=0; k<Dimsize(x1,0); k+=1)
-		dist_sqr_tmp = ((x1[k]- x1_mid)^2) + ((y1[k]-y1_mid)^2)
-		if(dist_sqr_tmp <= dist_sqr)
-			dist_sqr = dist_sqr_tmp
-			mid_location = k
-			mid_x = x1[k]
-			mid_y = y1[k]
-		endif
-	endfor
-	
-	make/o/n=(shift_nmpnts,shift_nmpnts) rms_im
-	//make/o/n=(shift_nmpnts,shift_nmpnts) x_initial_im
-	//make/o/n=(shift_nmpnts,shift_nmpnts) y_initial_im
-	
-	variable rms, rms_min, xshift_min, yshift_min, xscale_min, yscale_min
-	rms_min = 1000000
-	
-	
-	variable x_shift, y_shift
-	variable m=0
-	variable n=0
-	variable i=0
-	variable j=0
-	
-	// scale lattice independently in x and y directions
-	for(m=0; m<scale_nmpnts; m+=1)
-		for(n=0; n<scale_nmpnts; n+=1)
-			// scale
-			x1_tmp1 = x1 * (1-((scale_nmpnts/2)*scale_step)+(m*scale_step))
-			y1_tmp1 = y1 * (1-((scale_nmpnts/2)*scale_step)+(n*scale_step))
-			
-			// shift new scaled positions so that center atom position is the same as initial grid
-			x1_tmp1 = x1_tmp1 - (x1_tmp1[mid_location] - mid_x)
-			y1_tmp1 = y1_tmp1- (y1_tmp1[mid_location] - mid_y)
-			
-			// shift lattice everywhere within shift_range in x and y, and calculate rms at each position. Saves rms and position of minimum rms.
-			for(i=0; i<shift_nmpnts; i+=1)
-				for(j=0; j<shift_nmpnts; j+=1)
-					x1_tmp2 = x1_tmp1 - ((shift_nmpnts/2)*shift_step)+(i*shift_step)
-					y1_tmp2 = y1_tmp1 - ((shift_nmpnts/2)*shift_step) + (j*shift_step)
-					diff = sqrt(((x1_tmp2- x0)^2) + ((y1_tmp2-y0)^2))
-					Wavestats/q diff 
-					rms = V_rms
-					rms_im[i][j] = V_rms
-					if (rms<rms_min)
-						rms_min = rms
-						xshift_min = i
-						yshift_min = j
-						xscale_min = m
-						yscale_min = n
-						x1_final = x1_tmp2
-						y1_final = y1_tmp2
-					endif
-				endfor
-			endfor
-		endfor
-	endfor
-	
-	print "minimum rms = ", rms_min, "occurs at"
-	print "scale=",	(1-((scale_nmpnts/2)*scale_step)+(xscale_min*scale_step)), (1-((scale_nmpnts/2)*scale_step)+(yscale_min*scale_step)), "at x and y scale", xscale_min, yscale_min
-	print "first atom position=", x1_final[0], y1_final[0], "at x and y shift", xshift_min, yshift_min
-	print "x1_final and y1_final grid are for the minimum rms value"
-	
-	killwaves diff, x1_tmp1, y1_tmp1, x1_tmp2, y1_tmp2
-end
 
 
 // This function finds the position of x_lat_sort and y_lat_sort that minimizes the rms between the positions in (x_lat_sort, y_lat_sort) and (x0, y0).
@@ -610,7 +343,7 @@ end
 // The atom column position for the first atom in (x_lat,y_lat) is saved for each point in rms_im and can be found in x_initial_im and y_initial_im.
 // The x_lat_sort and y_lat_sort waves are shifted (or initialized) to the position that minimizes the rms between it and (x0, y0) and saved in x_lat_final and y_lat_final. 
 // The minimum rms value and the initialized (x,y) position of the first atom position in the list are printed in the history.
-function ShiftRMS(x_lat_sort, y_lat_sort, x0, y0, range, nmpnts)
+function RMS(x_lat_sort, y_lat_sort, x0, y0, range, nmpnts)
 	
 	wave x_lat_sort, y_lat_sort, x0, y0
 	variable range, nmpnts

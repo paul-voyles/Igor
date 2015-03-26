@@ -4,6 +4,8 @@
 //
 // begun 01-20-2014, pmv
 //
+// Change ac_time wave to double precision, 02-17-14 pmv
+// fix poisson bug
 
 // input is the image to distort in im and the number of distorted frames to generate in
 // steps.  Input image calibration is used: distances and velocities are assumed to be in
@@ -16,18 +18,18 @@ function STEMDistortionStack(im, steps)
 	
 	// parameters describing the image series
 	variable nx = 256, ny = 256, npix = nx*ny
-	variable x0 = 10, y0 = 10
+	variable x0=39.827, y0=27.959
 	variable dwell = 16e-6 				// pixel dwell time in seconds
 	variable flyback = 60e-6 			// line flyback time in seconds
 	variable interframe = 1e-3 			// frame-to-frame delay time in seconds
-	variable dose_per_pixel = 5000		// incident electrons per pixel in each frame
+	variable dose_per_pixel = 832		// incident electrons per pixel in each frame
 
 	// variables describing the distortions
-	variable slow_rand_f = 0.1  	// frequency (Hz) of random walk excuted by sample.
+	variable slow_rand_f = 0.08  	// frequency (Hz) of random walk excuted by sample.
 							  	// should have a period longer than the frame time
-	variable slow_rand_mag = 0.5 	// maximum magntidue of the random walk, in the distance units
+	variable slow_rand_mag = 0.3 	// maximum magntidue of the random walk, in the distance units
 								// of the (calibrated) input image
-	variable vel_x = 0.0, vel_y = 0.0		// x- and y- components of constant velocity linear drift.  Velocity in units
+	variable vel_x = 0.007, vel_y = 0.007		// x- and y- components of constant velocity linear drift.  Velocity in units
 									// of distance / second, for calibrated distance units of the input image
 
 	// waves for adjustable sets of high-frequency, zero-mean distortions
@@ -35,9 +37,9 @@ function STEMDistortionStack(im, steps)
 	// should be smaller than the main line at 60 Hz.
 	// There is also a small bump in the instability spectrum around 400 Hz.  The bandwidth of the image
 	// single in principle goes up to frequency = 1/(2*dwell) ~ 30 kHz.
-	Make/o/N=(5) freq, mag
-	freq = {30, 60, 120, 180, 400}
-	mag = {0.015, 0.030, 0.015, 0.007, 0.007}
+	Make/o/N=(6) freq, mag
+	freq = {30, 120, 160, 430, 1000, 2725}
+	mag = {0.015, 0.01, 0.007, 0.004, 0.004, 0.004}
 	
 	// other useful variables
 	variable dx = DimDelta(im, 0), dy = DimDelta(im, 1)
@@ -88,7 +90,8 @@ function STEMDistortionStack(im, steps)
 		ImageTransform/P=(i)/PTYP=0/D=M_ImagePlane setPlane resample_st
 	endfor
 	  
-	Killwaves M_ImagePlane, ac_time, grid_x, grid_y, cum_sx, cum_sy
+	Killwaves M_ImagePlane 
+	killwaves ac_time, grid_x, grid_y, cum_sx, cum_sy
 	Killwaves tseries_x, tseries_y, freq, mag
 end
 
@@ -208,7 +211,7 @@ end
 function AcTime(nx, ny, steps, dwell, flyback, interframe)
 	variable nx, ny, steps, dwell, flyback, interframe
 	
-	make/o/n=(nx*ny*steps) ac_time
+	make/d/o/n=(nx*ny*steps) ac_time
 	
 	ac_time = 0
 	variable i=1
@@ -329,6 +332,6 @@ function FramePNoise(im, dose_per_pixel)
 	wave im
 	variable dose_per_pixel
 	
-	im = poissonNoise(sqrt(dose_per_pixel*im[p][q]))
+	im = poissonNoise(dose_per_pixel*im[p][q])
 	
 end

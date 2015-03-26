@@ -504,105 +504,6 @@ function TruncateGrid(xs, xe, ys, ye, xl, yl)
 	
 end
 
-
-
-function ShiftScaleRMS(x1, y1, x0, y0, shift_range, shift_nmpnts, scale_range, scale_nmpnts)
-	
-	wave x1, y1, x0, y0
-	variable shift_range, shift_nmpnts, scale_range, scale_nmpnts
-	
-	duplicate/o x1, x1_tmp1
-	duplicate/o x1, x1_tmp2
-	duplicate/o x1, x1_final
-	duplicate/o y1, y1_tmp1
-	duplicate/o y1, y1_tmp2
-	duplicate/o y1, y1_final
-	duplicate/o x1, diff
-	
-	variable shift_step = shift_range/shift_nmpnts
-	variable scale_step = scale_range/scale_nmpnts
-	
-	//determine x1 and y1 stats for proper scaling
-	Wavestats/q x1 
-	variable x1_min = V_min
-	variable x1_max = V_max
-	variable x1_mid = (V_max + V_min)/2
-	Wavestats/q y1
-	variable y1_min = V_min
-	variable y1_max = V_max
-	variable y1_mid = (V_max + V_min)/2
-	
-	//determine center atom column
-	variable mid_location, mid_x, mid_y, dist_sqr, dist_sqr_tmp
-	dist_sqr=50
-	variable k=0
-	for(k=0; k<Dimsize(x1,0); k+=1)
-		dist_sqr_tmp = ((x1[k]- x1_mid)^2) + ((y1[k]-y1_mid)^2)
-		if(dist_sqr_tmp <= dist_sqr)
-			dist_sqr = dist_sqr_tmp
-			mid_location = k
-			mid_x = x1[k]
-			mid_y = y1[k]
-		endif
-	endfor
-	
-	make/o/n=(shift_nmpnts,shift_nmpnts) rms_im
-	//make/o/n=(shift_nmpnts,shift_nmpnts) x_initial_im
-	//make/o/n=(shift_nmpnts,shift_nmpnts) y_initial_im
-	
-	variable rms, rms_min, xshift_min, yshift_min, xscale_min, yscale_min
-	rms_min = 1000000
-	
-	
-	variable x_shift, y_shift
-	variable m=0
-	variable n=0
-	variable i=0
-	variable j=0
-	
-	// scale lattice independently in x and y directions
-	for(m=0; m<scale_nmpnts; m+=1)
-		for(n=0; n<scale_nmpnts; n+=1)
-			// scale
-			x1_tmp1 = x1 * (1-((scale_nmpnts/2)*scale_step)+(m*scale_step))
-			y1_tmp1 = y1 * (1-((scale_nmpnts/2)*scale_step)+(n*scale_step))
-			
-			// shift new scaled positions so that center atom position is the same as initial grid
-			x1_tmp1 = x1_tmp1 - (x1_tmp1[mid_location] - mid_x)
-			y1_tmp1 = y1_tmp1- (y1_tmp1[mid_location] - mid_y)
-			
-			// shift lattice everywhere within shift_range in x and y, and calculate rms at each position. Saves rms and position of minimum rms.
-			for(i=0; i<shift_nmpnts; i+=1)
-				for(j=0; j<shift_nmpnts; j+=1)
-					x1_tmp2 = x1_tmp1 - ((shift_nmpnts/2)*shift_step)+(i*shift_step)
-					y1_tmp2 = y1_tmp1 - ((shift_nmpnts/2)*shift_step) + (j*shift_step)
-					diff = sqrt(((x1_tmp2- x0)^2) + ((y1_tmp2-y0)^2))
-					Wavestats/q diff 
-					rms = V_rms
-					rms_im[i][j] = V_rms
-					if (rms<rms_min)
-						rms_min = rms
-						xshift_min = i
-						yshift_min = j
-						xscale_min = m
-						yscale_min = n
-						x1_final = x1_tmp2
-						y1_final = y1_tmp2
-					endif
-				endfor
-			endfor
-		endfor
-	endfor
-	
-	print "minimum rms = ", rms_min, "occurs at"
-	print "scale=",	(1-((scale_nmpnts/2)*scale_step)+(xscale_min*scale_step)), (1-((scale_nmpnts/2)*scale_step)+(yscale_min*scale_step)), "at x and y scale", xscale_min, yscale_min
-	print "first atom position=", x1_final[0], y1_final[0], "at x and y shift", xshift_min, yshift_min
-	print "x1_final and y1_final grid are for the minimum rms value"
-	
-	killwaves diff, x1_tmp1, y1_tmp1, x1_tmp2, y1_tmp2
-end
-
-
 // This function finds the position of x_lat_sort and y_lat_sort that minimizes the rms between the positions in (x_lat_sort, y_lat_sort) and (x0, y0).
 // range is the number of pixels in x and y you want to scan over (range x range) = area scanned.
 // nmpnts is the number of points you want split that range up into. (nmpnts x nmpnts) = number of points in area.
@@ -610,7 +511,7 @@ end
 // The atom column position for the first atom in (x_lat,y_lat) is saved for each point in rms_im and can be found in x_initial_im and y_initial_im.
 // The x_lat_sort and y_lat_sort waves are shifted (or initialized) to the position that minimizes the rms between it and (x0, y0) and saved in x_lat_final and y_lat_final. 
 // The minimum rms value and the initialized (x,y) position of the first atom position in the list are printed in the history.
-function ShiftRMS(x_lat_sort, y_lat_sort, x0, y0, range, nmpnts)
+function RMS(x_lat_sort, y_lat_sort, x0, y0, range, nmpnts)
 	
 	wave x_lat_sort, y_lat_sort, x0, y0
 	variable range, nmpnts

@@ -1,7 +1,7 @@
 #pragma rtGlobals=1		// Use modern global access method.
 #include "XYZ"
 
-//
+// 
 // Procedure for common neighbor analysis of a XYZ model structure
 //
 // Uses 3-index notation from Clarke and Jonsson, PRE 47, 3975 (1993)

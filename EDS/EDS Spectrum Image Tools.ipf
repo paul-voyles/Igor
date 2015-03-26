@@ -83,7 +83,7 @@ function ThresholdSpectrum(IntegratedSpectrum, threshold)
 end
 
 
-// truncates a 3D spectrum image
+// truncates a 3D spectrum image. add more
 function TruncateSpectrumImage(SI, peak_locations)
 	wave SI, peak_locations
 	

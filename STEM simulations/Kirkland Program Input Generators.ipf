@@ -14,7 +14,6 @@
 // detect_angles, 2D wave, inner and outer angles for each detector
 // detect_name, output image basename for each detector.
 // outnum is the number in the total sequence, starting at 0.
-// Initializing Cc and dE to 0.0 and 0.0, respectively for autostem calculation on Condor. This will not influence the running on Odie.  07/10/2014 JFeng
 
 function ProtoOutput(directory, basename, modelname, stem_p, aber, sim_p, image_p, detect_p, detect_name, thick_p, outnum)
 	string directory, basename, modelname
@@ -96,8 +95,6 @@ function OneAutostemImageOut(directory, basename, modelname, stem_p, aber, sim_p
 		fprintf f, "%f\n", sim_p[7]
 	endif
 	
-	fprintf f, "0.0   0.0\n", 	// Cc and dE 07/10/2014 by Jie Feng
-	
 	close f
 end
 
@@ -165,8 +162,6 @@ function OneAutostemLineOut(directory, basename, modelname, stem_p, aber, sim_p,
 		fprintf f, "%ld\n", (2^31-1)*(enoise(0.5)+0.5)
 		fprintf f, "%f\n", sim_p[7]
 	endif
-	
-	fprintf f, "0.0   0.0\n", 	// Cc and dE 07/10/2014 by Jie Feng
 	
 	close f
 end

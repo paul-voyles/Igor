@@ -135,6 +135,6 @@ function PairwiseRigidShift(st, ref, fit_win, max_shift, windowYN)
 		endif
 	endfor
 	
-	Killwaves f1, f2, M_ImagePlane, M_InterpolatedImage	
+	//Killwaves f1, f2, M_ImagePlane, M_InterpolatedImage	
 	
 end

@@ -8,6 +8,8 @@
 //
 // LoadPOSCARWork: non-interactive version which takes command line arguments or can
 // be used programmatically.
+//
+// 04-19-15: major bug fix in coordinate loading.  minor improvement in dialog cancellation
 
 // Add load POSCAR menu item
 Menu "Load Waves"
@@ -27,10 +29,19 @@ function LoadPOSCAR()
 	variable ax, by, cz
 	Prompt ax, "Enter ax in Angstroms:"
 	DoPrompt "Supercell size", ax
+	if(V_flag)
+		return -1
+	endif
 	Prompt by, "Enter by in Angstroms:"
 	DoPrompt "Supercell size", by
+	if(V_flag)
+		return -1
+	endif
 	Prompt cz, "Enter cz in Angstroms:"
 	DoPrompt "Supercell size", cz
+	if(V_flag)
+		return -1
+	endif
 	
 	make/o/n=(0, 2) dwf
 	string s
@@ -82,9 +93,9 @@ function LoadPOSCARWork(file, ax, by, cz, dwf)
 	SetCell(poscar_xyz, ax, by, cz)
 	
 	poscar_xyz[][0] = SymboltoZ(Zs[p])
-	poscar_xyz[][1] = ax*fz[p]
-	poscar_xyz[][2] = by*fy[p]
-	poscar_xyz[][3] = cz*fz[p]
+	poscar_xyz[][1] = fx[p]
+	poscar_xyz[][2] = fy[p]
+	poscar_xyz[][3] = fz[p]
 	poscar_xyz[][4] = 1
 	poscar_xyz[][5] = NaN
 	

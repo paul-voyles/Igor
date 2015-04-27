@@ -9,6 +9,9 @@
 // "EmbedandConvolveStack" takes a stack of images as the input.
 // Before each procedure there are explanations of what that procedure does.
 // Andrew B. Yankovich (6/24/14)
+//
+// Updated PeriodicContinue to preserve the wave scaling.  4/27/15, pmv
+
 
 
 // takes an image im and crops it with boundary xi yi xf yf.  
@@ -94,6 +97,9 @@ function PeriodicContinue(im, mag_x, mag_y)
 			imagetransform /INSI=im /INSX=(i*xsize) /INSY=(j*ysize) insertImage new_image
 		endfor
 	endfor
+	
+	SetScale/P x DimSize(im, 0), DimDelta(im, 0), new_image
+	SetScale/P y DimSize(im, 1), DimDelta(im, 1), new_image
 	
 end
 

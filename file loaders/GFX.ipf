@@ -261,12 +261,8 @@ end
 function LoadGFX(file)
 	string file
 
-	variable fnum	
-	Open/R fnum as file
-	
-	if(!strlen(S_fileName))
-		return -1
-	endif
+	variable fnum
+	Open/R fnum as file	
  	
 	variable endian, size_x, size_y, size_z, byte_depth, enum_type
 	
@@ -277,7 +273,19 @@ function LoadGFX(file)
 	FBinRead/F=3 fnum, byte_depth
 	FbinRead/F=3 fnum, enum_type
 		
+//	if(size_z != 1)
+//		printf "3D images are not supported.  No wave loaded.\r"
+//		Close fnum
+//		return -1
+//	endif	
+		
 	Make/O gfx_read
+	
+	if(!strlen(S_fileName))
+		Redimension/W/N=(size_x, size_y) gfx_read
+		gfx_read=0
+		return -1
+	endif
 
 	variable r = 0
 	switch (enum_type)

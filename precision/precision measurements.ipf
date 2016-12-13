@@ -107,6 +107,105 @@ function cropimage(im, xi, yi, xf, yf)
 
 end
 
+function TiPeakPositions(image,threshold_1, threshold_2)
+	
+	variable threshold_1, threshold_2
+	wave image
+	
+	//NewImage image
+	
+	ImageThreshold/I/T=(threshold_1)/M=0/Q image
+	ImageAnalyzeParticles /E/W/Q/F/M=3/A=2/EBPC stats, root:M_ImageThresh
+	
+	duplicate/O W_xmin x_loc_1	
+	duplicate/O W_ymin y_loc_1
+	duplicate/O W_xmin xmin	
+	duplicate/O W_ymin ymin
+	duplicate/O W_xmax xmax	
+	duplicate/O W_ymax ymax
+	
+	x_loc_1 = (xmax + xmin) / 2
+	y_loc_1 = (ymax + ymin) / 2
+	
+	killwaves W_ImageObjArea, W_SpotX, W_SpotY, W_circularity, W_rectangularity, W_ImageObjPerimeter, M_Moments, M_RawMoments
+	killwaves W_BoundaryX, W_BoundaryY, W_BoundaryIndex, W_xmin, W_xmax, W_ymin, W_ymax, xmin, xmax, ymin, ymax
+	
+	ImageThreshold/I/T=(threshold_2)/M=0/Q image
+	ImageAnalyzeParticles /E/W/Q/F/M=3/A=2/EBPC stats, root:M_ImageThresh
+	
+	duplicate/O W_xmin x_loc_2	
+	duplicate/O W_ymin y_loc_2
+	duplicate/O W_xmin xmin	
+	duplicate/O W_ymin ymin
+	duplicate/O W_xmax xmax	
+	duplicate/O W_ymax ymax
+	
+	x_loc_2 = (xmax + xmin) / 2
+	y_loc_2 = (ymax + ymin) / 2
+	
+	killwaves W_ImageObjArea, W_SpotX, W_SpotY, W_circularity, W_rectangularity, W_ImageObjPerimeter, M_Moments, M_RawMoments
+	killwaves W_BoundaryX, W_BoundaryY, W_BoundaryIndex, W_xmin, W_xmax, W_ymin, W_ymax, xmin, xmax, ymin, ymax
+	
+	variable num_peaks_1, num_peaks_2
+	num_peaks_1 = DimSize(x_loc_1, 0)
+	num_peaks_2 = DimSize(x_loc_2, 0)
+	//printf "%g %g\r" num_peaks_1, num_peaks_2
+	
+	variable j,k
+	variable i=1
+	Make/O/N=0 x_loc, y_loc
+	for(j=0; j<num_peaks_2; j+=1)
+		for(k=0; k<num_peaks_1; k+=1)
+			//printf "%g %g\r" abs(x_loc_2(j) - x_loc_1(k)), abs(y_loc_2(j) - y_loc_1(k)) 
+			if(abs(x_loc_2(j) - x_loc_1(k)) < 2 && abs(y_loc_2(j) - y_loc_1(k)) < 2)
+				i=0
+			endif
+		endfor
+		//printf "%g\r" i
+		if(i==1)
+			InsertPoints 0,1,x_loc
+			x_loc[0]=x_loc_2(j)
+			InsertPoints 0,1,y_loc
+			y_loc[0]=y_loc_2(j)
+		endif
+		i=1
+	endfor
+	appendtograph/t y_loc vs x_loc
+	modifygraph mode=2
+	modifygraph lsize=3
+	killwaves x_loc_1, y_loc_1, x_loc_2, y_loc_2,M_ImageThresh, M_Particle
+	
+end
+
+
+function ThresholdPeakPositions(image, threshold)
+
+	wave image
+	variable threshold
+	
+	//NewImage image
+	
+	ImageThreshold/I/T=(threshold)/M=0/Q image
+	ImageAnalyzeParticles /E/W/Q/F/M=3/A=2/EBPC stats, root:M_ImageThresh
+	
+	duplicate/O W_xmin x_loc	
+	duplicate/O W_ymin y_loc
+	duplicate/O W_xmin xmin	
+	duplicate/O W_ymin ymin
+	duplicate/O W_xmax xmax	
+	duplicate/O W_ymax ymax
+	
+	x_loc = (xmax + xmin) / 2
+	y_loc = (ymax + ymin) / 2
+	
+	appendtograph/t y_loc vs x_loc
+	ModifyGraph mode=2
+	ModifyGraph lsize=3
+	
+	killwaves W_ImageObjArea, W_SpotX, W_SpotY, W_circularity, W_rectangularity, W_ImageObjPerimeter, M_Moments, M_RawMoments
+	killwaves W_BoundaryX, W_BoundaryY, W_BoundaryIndex, W_xmin, W_xmax, W_ymin, W_ymax, xmin, xmax, ymin, ymax
+end
+
 
 // takes an stack of residual images and outputs two 1D waves (res_av and res_stdv) which are the avgs and stdevs from each ind residual.
 function ResidualAverage(res)
@@ -469,6 +568,64 @@ function GaussianFit(image, x_loc, y_loc, size, wiggle, [fix_xy, no_noise])
 	killwaves W_sigma, W_coef, M_covar, x_finish, x_start, y_finish, y_start, noise
 end
 
+//This function is used to fit each image in a stack with the same initial guess in x_loc, y_loc
+//12/06/2016 cz
+function StackGaussianFit(im_stack, x_loc, y_loc, size)
+
+	wave im_stack, x_loc, y_loc
+	variable size
+	variable num_frames = DimSize(im_stack,2)
+	variable num_peaks = Dimsize(x_loc,0)
+	variable total_peaks = num_frames*num_peaks
+	variable half_size = size/2
+	
+	duplicate/O x_loc x_start
+	duplicate/O x_loc x_finish
+	duplicate/O y_loc y_start
+	duplicate/O y_loc y_finish
+	
+	x_start = x_loc - half_size
+	x_finish = x_loc + half_size
+	y_start = y_loc - half_size
+	y_finish = y_loc + half_size
+
+	Make/O/N=(num_peaks,num_frames) z0_stack, A_stack, x0_stack, xW_stack, y0_stack, yW_stack, cor_stack
+	Make/O/N=(num_peaks,num_frames) sigma_z0_stack, sigma_A_stack, sigma_x0_stack, sigma_xW_stack, sigma_y0_stack, sigma_yW_stack, sigma_cor_stack
+	
+	variable i
+	for(i=0; i<num_frames; i+=1)
+		Imagetransform/p=(i) getplane im_stack
+		wave im = $"M_ImagePlane"
+		GaussianFit(im, x_loc, y_loc, size, 1) //1 is used as default wiggle size as it doesn't matter much
+		wave z0 = $"z0"
+		wave A = $"A"
+		wave x0 = $"x0"
+		wave xW = $"xW"
+		wave y0 = $"y0"
+		wave yW = $"yW"
+		wave cor = $"cor"
+		wave sigma_z0 = $"sigma_z0"
+		wave sigma_A = $"sigma_A"
+		wave sigma_x0 = $"sigma_x0"
+		wave sigma_xW = $"sigma_xW"
+		wave sigma_y0 = $"sigma_y0"
+		wave sigma_yW = $"sigma_yW"
+		z0_stack[][i] = z0[p]
+		A_stack[][i] = A[p]
+		x0_stack[][i] = x0[p]
+		xW_stack[][i] = xW[p]
+		y0_stack[][i] = y0[p]
+		yW_stack[][i] = yW[p]
+		cor_stack[][i] = cor[p]
+		sigma_z0_stack[][i] = sigma_z0[p]
+		sigma_A_stack[][i] = sigma_A[p]
+		sigma_x0_stack[][i] = sigma_x0[p]
+		sigma_xW_stack[][i] = sigma_xW[p]
+		sigma_y0_stack[][i] = sigma_y0[p]
+		sigma_yW_stack[][i] = sigma_yW[p]
+	endfor
+	killwaves z0, A, x0, xW, y0, yW, cor, sigma_z0, sigma_A, sigma_x0, sigma_xW, sigma_y0, sigma_yW
+end
 
 // Fits the region size x size about the center position (x_loc, y_loc) to a 2D Guassian,
 // but repeats the fit shifting the region around from -wiggle to +wiggle in x and y.  

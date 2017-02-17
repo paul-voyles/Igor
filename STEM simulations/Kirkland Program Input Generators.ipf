@@ -50,8 +50,9 @@ function OneAutostemImageOut(directory, basename, modelname, stem_p, aber, sim_p
 		return 0
 	endif
 	
-	variable ndetect = numpnts(detect_name)
+	variable ndetect = dimsize(detect_name,0)
 	
+
 	fprintf f, "%s\n", modelname
 	fprintf f, "1 1 1\n"	// replicate unit cell
 	fprintf f, "%f   %f   %f \n", stem_p[0], stem_p[1], stem_p[2]
@@ -79,9 +80,14 @@ function OneAutostemImageOut(directory, basename, modelname, stem_p, aber, sim_p
 	fprintf f, "%d\n", ndetect
 	variable i
 	for(i=0; i<ndetect; i+=1)
-		fprintf f, "%f   %f\n", detect_p[i][0], detect_p[i][1]
+		fprintf f, "%f   %f\n", detect_p[i][0], detect_p[i][1]	//detector inner and outer angle
+		fprintf f, "%f   %f\n", detect_p[i][2], detect_p[i][3]	//detector x and y center
+		fprintf f, "n\n"													//outer angle not limited by aperture
+		fprintf f, "0\n"													//detector rotation angle
+		fprintf f, "%s.tif\n", detect_name[i][1]					//detector sensitivity file name
+		fprintf f, "adapted_detector%d\n", i+1						//adapted sensmap file name
 	endfor
-	
+
 	fprintf f, "%f   %f   %f   %f   %d   %d\n", image_p[0], image_p[1], image_p[2], image_p[3], image_p[4], image_p[5]
 	fprintf f, "%f\n", sim_p[4]
 	
@@ -130,10 +136,13 @@ function OneAutostemLineOut(directory, basename, modelname, stem_p, aber, sim_p,
 		return 0
 	endif
 	
-	variable ndetect = numpnts(detect_name)
+	variable ndetect = dimsize(detect_name,0)
 	
+	fprintf f, "sensmap.tif\n"
+	fprintf f, "512 512\n"
+	fprintf f, "0\n"
 	fprintf f, "%s\n", modelname
-	fprintf f, "1 1 1\n"	// replicate unit cell
+	fprintf f, "10 10 130\n"	// replicate unit cell
 	fprintf f, "%f   %f   %f \n", stem_p[0], stem_p[1], stem_p[2]
 	fprintf f, "%f   %f   %f \n", aber[0][0], aber[1][0], aber[1][1]  // C1, A1
 	fprintf f, "%f   %f   %f   %f \n", aber[2][0], aber[2][1], aber[3][0], aber[3][1]  // A2, B2
@@ -152,6 +161,7 @@ function OneAutostemLineOut(directory, basename, modelname, stem_p, aber, sim_p,
 		fprintf f, "%f   %f\n", detect_p[i][0], detect_p[i][1]
 	endfor
 	
+	fprintf f, "sensmap_adapted.tif\n"
 	fprintf f, "%f   %f   %f   %f   %d   %d\n", image_p[0], image_p[1], image_p[2], image_p[3], image_p[4]
 	fprintf f, "%f\n", sim_p[4]
 	

@@ -1,5 +1,5 @@
 #pragma rtGlobals=1		// Use modern global access method.
-#include "Stem Chop"
+//#include "Stem Chop"
 
 // fixed SetPhonon bug 02-07-10
 // added configurations for exectuable files and email addresses 03-09-10 pmv
@@ -392,18 +392,24 @@ function detect() : Panel
 
 	string fol = GetDataFolder(1)
 	SetDataFolder root:Packages:stem_chop:
-	Make/O/T/N=(numpnts(detect_name), 3) detect_lb
-	Make/O/B/U/N=(numpnts(detect_name), 3) detect_sw
+	Make/O/T/N=(dimsize(detect_name,0), 6) detect_lb
+	Make/O/B/U/N=(dimsize(detect_name,0), 6) detect_sw
 	wave/t detect_name = $"detect_name"
 	wave detect_p = $"detect_p"
-	detect_lb[][0] = detect_name[p]
+	detect_lb[][0] = detect_name[p][0]
 	detect_lb[][1] = num2str(detect_p[p][0])
 	detect_lb[][2] = num2str(detect_p[p][1])
+	detect_lb[][3] = num2str(detect_p[p][2])
+	detect_lb[][4] = num2str(detect_p[p][3])
+	detect_lb[][5] = detect_name[p][1]
 	detect_sw = 2
 	
 	SetDimLabel 1, 0, 'detector name', detect_lb
 	SetDimlabel 1, 1, 'inner angle (mr)', detect_lb
 	SetDimLabel 1, 2, 'outer angle (mr)', detect_lb	
+	SetDimLabel 1, 3, 'center x', detect_lb
+	SetDimLabel 1, 4, 'center y', detect_lb
+	SetDimLabel 1, 5, 'file name', detect_lb
 
 	// draw the panel
 	PauseUpdate; Silent 1		// building window...
@@ -439,6 +445,9 @@ Function AddDetector(ctrlName) : ButtonControl
 	detect_lb[n][0] = "<name>"
 	detect_lb[n][1] = "0"
 	detect_lb[n][2] = "0"
+	detect_lb[n][3] = "0"
+	detect_lb[n][4] = "0"
+	detect_lb[n][5] = "<name>"
 	detect_sw[n][] = 2
 end
 
@@ -492,6 +501,8 @@ Function DefaultDetectors(ctrlName) : ButtonControl
 	detect_lb[][0] = name[p]
 	detect_lb[][1] = num2str(param[p][0])
 	detect_lb[][2] = num2str(param[p][1])
+	detect_lb[][3] = num2str(param[p][2])
+	detect_lb[][4] = num2str(param[p][3])
 	detect_sw = 2
 
 	SetDataFolder fol
@@ -506,12 +517,15 @@ function ReadDetectors()
 	SetDataFolder root:Packages:stem_chop:
 	
 	variable ndet = DimSize(detect_lb, 0)
-	Make/O/T/N=(ndet) detect_name
+	Make/O/T/N=(ndet, 2) detect_name
 	Make/O/N=(ndet, 2) detect_p
 	
-	detect_name = detect_lb[p][0]
-	detect_p[][0] = str2num(detect_lb[p][1])
-	detect_p[][1] = str2num(detect_lb[p][2])
+	detect_name[p][0] = detect_lb[p][0] //detector name
+	detect_p[][0] = str2num(detect_lb[p][1]) //inner angle
+	detect_p[][1] = str2num(detect_lb[p][2]) //outer angle
+	detect_p[][2] = str2num(detect_lb[p][3]) //center x
+	detect_p[][3] = str2num(detect_lb[p][4]) //center y
+	detect_name[p][1] = detect_lb[p][5] //detector sensmap name
 	
 	SetDataFolder fol
 end

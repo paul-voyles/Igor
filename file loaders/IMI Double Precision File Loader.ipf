@@ -15,6 +15,8 @@ Menu "Load Waves"
 	help = {"Load an IMI .dat file."}
 	"Load folder of IMI files . . . ", LoadIMIFolder()
 	help = {"Load all the IMI .dat files in a the selected folder."}
+	"Load folder of IMI files in reverse order . . .", LoadIMIFolderSwitchOrder()
+	help = {"Load all the IMI .dat files in a the selected folder."}
 end
 
 // Add save IMI menu items.
@@ -218,3 +220,35 @@ function WriteIMIStackWork(im, base_file, fol)
 	
 end
 	
+	
+	
+function LoadIMIFolderSwitchOrder()
+	NewPath/O/M="Select a directory of .dat files" dirpath
+	PathInfo dirpath
+	string dirname = S_Path
+	if(!strlen(dirname))
+		return 0
+	endif
+	
+	variable w
+	Prompt w, "Enter # of images:"
+	DoPrompt "Enter # of images", w
+	
+	string gfx_name, gfx_name_new, gfx_path
+	variable i=0
+	do
+		gfx_name = IndexedFile(dirpath, i, ".dat")
+		gfx_name_new = IndexedFile(dirpath, w-1-i, ".dat")
+		if(!strlen(gfx_name))
+			return 1
+		endif 
+		gfx_path = dirname  + gfx_name
+		LoadIMI(gfx_path)
+		//gfx_name = StringFromList(0, gfx_name, ".")
+		gfx_name_new = StringFromList(0, gfx_name_new, ".")
+		Rename imi_read $gfx_name_new
+		
+		i+=1
+	while(1)
+	
+end

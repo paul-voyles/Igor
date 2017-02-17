@@ -1,5 +1,5 @@
 #pragma rtGlobals=1		// Use modern global access method.
-#include "Kirkland Program Input Generators"
+//#include "Kirkland Program Input Generators"
 
 // functions to generate a set of condor inputs for autostem and autoconfocal:
 // take a full MXN output image and break it up into parts to be 
@@ -56,7 +56,7 @@ function MakeControlWaves()
 	Make/O/T/N=9 imageout_p_labels = {"xi", "xf", "yi", "yf", "nx", "ny", "# of chunks in x", "# of chunks in y", "thickness level y/n"}
 	make/O/T/N=4 names
 	make/O/T/N=4 filename_labels = {"model filename", "output basename", "stem cmd comment", "model file path"}
-	make/O/T/N=4 sim_paths = { "/home/voyles/bin/autostem", "voyles@engr.wisc.edu", "/filespace/people/v/voyles/bin/autostem", "/filespace/people/v/voyles/simulations/working/"}
+	make/O/T/N=4 sim_paths = { "/home/voyles/bin/autostem", "voyles@engr.wisc.edu", "/home/czhang376/bin/autoslice/autostem", "/home/czhang376/AutosliceJobs/"}
 	make/O/T/N=4 sim_paths_labels = {"cluster executable", "email", "condor executable", "condor working directory"}
 	
 	// Make default detector waves.
@@ -200,10 +200,10 @@ function StemChopDescription(program, directory, names, stem_p, aber, sim_p, det
 	fprintf f, "This results in %d total subimages.\r\n\r\n", outnum
 	
 	fprintf f, "Detector parameters:\r\n"
-	variable ndetect = numpnts(detect_name)
+	variable ndetect = dimsize(detect_name,0)
 	variable i
 	for(i=0; i<ndetect; i+=1)
-		fprintf f, "Detector %s extends from %g to %g mrad.\r\n ", detect_name[i], detect_p[i][0], detect_p[i][1]
+		fprintf f, "Detector %s extends from %g to %g mrad.\r\n ", detect_name[i][0], detect_p[i][0], detect_p[i][1]
 //		if(!cmpstr(program, "autostem"))
 //			fprintf f, "mrad.\r\n"
 //		else
@@ -274,7 +274,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 		fprintf f, "npy = DimSize(gfx_read, 1)\r"
 	endif		
 
-	variable ndetect = numpnts(detect_name)
+	variable ndetect = dimsize(detect_name,0)
 	variable nthick = numpnts(thick_p)+1
 	if(!thick_yn)
 		nthick = 0
@@ -298,7 +298,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 					pname[nt] = onen
 					fprintf f, "Make/O/N=(npx, npy) %s\r",  onen
 				endif
-				sprintf onen, "%s_%s_t%d", basename, detect_name[nd], nt+1
+				sprintf onen, "%s_%s_t%d", basename, detect_name[nd][0], nt+1
 				wname[nw] = onen
 				fprintf f, "Make/O/N=(%d, %d) %s\r", nx, ny, wname[nw]
 				fprintf f, "SetScale/I x %f, %f, \"\", %s\r", xi, xf, wname[nw]
@@ -311,7 +311,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 				pname[0] = onen
 				fprintf f, "Make/O/N=(npx, npy) %s\r",  onen
 			endif
-			sprintf onen, "%s_%s", basename, detect_name[nd]
+			sprintf onen, "%s_%s", basename, detect_name[nd][0]
 			wname[nw] = onen
 			fprintf f, "Make/O/N=(%d, %d) %s\r", nx, ny, wname[nw]
 			fprintf f, "SetScale/I x %f, %f, \"\", %s\r", xi, xf, wname[nw]

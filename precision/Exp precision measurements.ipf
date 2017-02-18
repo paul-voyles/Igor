@@ -74,6 +74,54 @@
 
 // This function converts images in counts to electrons
 // inputs: original image in counts, numSamples, and HAADF gain in electrons/counts
+
+function JDDCPeakPositions(average,startX,startY,threshold)
+
+	variable startX, startY, threshold
+	wave average
+	duplicate/O average average_original //backup the original image
+	
+	//crop image according to start point and image size
+	variable endX=startX + 149
+	variable endY=startY + 149
+	cropimage(average, startX, startY, endX, endY)
+	
+	//detect peaks with thresholdpeakpositions then filter peaks too close to border
+	ThresholdPeakPositions(average, threshold)
+	wave x_loc = $"x_loc"
+	wave y_loc = $"y_loc"
+	// Consider how to use SortColumn operate to make it work better
+	variable numpeaks = DimSize(x_loc,0)
+	variable i
+	for (i=0; i<numpeaks ; i++)
+		if(x_loc(i)<10 || x_loc(i)>140 || y_loc(i)<10 || y_loc(i)>140)
+			deletepoints i, 1, x_loc
+			deletepoints i, 1, y_loc
+			i = i -1;
+			numpeaks = numpeaks - 1;
+		endif
+	endfor
+	
+	//Typical gaussian fit and separation anlysis
+	Gaussianfit(average,x_loc,y_loc,14,1)
+	wave x0 = $"x0"
+	wave y0 = $"y0"
+	separation(19,19,3,0,-90,10)
+	wave prec = $"prec"
+	variable x_prec = prec[1]
+	variable y_prec = prec[3]
+	x_prec = x_prec * 21.16
+	y_prec = y_prec * 21.19
+	printf "x precision is %g pm\n", x_prec
+	printf "y precision is %g pm\n", y_prec 
+	
+	//Display results	
+	newimage average
+	appendtograph/t y0 vs x0
+	modifygraph mode=2
+	modifygraph lsize=3
+end
+
 function CountstoElectrons(average, numSamples, gain)
 	
 	variable gain

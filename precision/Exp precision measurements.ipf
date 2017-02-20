@@ -75,26 +75,47 @@
 // This function converts images in counts to electrons
 // inputs: original image in counts, numSamples, and HAADF gain in electrons/counts
 
+function stackJDDCPeakPositions(imstack,startpoint,threshold)
+
+	variable threshold
+	wave imstack, startpoint
+	variable numframes = DimSize(imstack,2)
+	variable i
+	Make/O/N=(numframes,2) PrecList
+	
+	for (i=0; i<numframes; i++)
+		Imagetransform/p=(i) getplane imstack
+		wave im = $"M_ImagePlane"
+		JDDCPeakPositions(im,startpoint[i][0],startpoint[i][1],threshold)
+		wave prec = $"prec"
+		PrecList[i][0]=prec[1]*21.16
+		PrecList[i][1]=prec[3]*21.19
+	endfor
+	
+end
+
+
+
 function JDDCPeakPositions(average,startX,startY,threshold)
 
 	variable startX, startY, threshold
 	wave average
-	duplicate/O average average_original //backup the original image
+	duplicate/O average average_new //backup the original image
 	
 	//crop image according to start point and image size
 	variable endX=startX + 149
 	variable endY=startY + 149
-	cropimage(average, startX, startY, endX, endY)
+	cropimage(average_new, startX, startY, endX, endY)
 	
 	//detect peaks with thresholdpeakpositions then filter peaks too close to border
-	ThresholdPeakPositions(average, threshold)
+	ThresholdPeakPositions(average_new, threshold)
 	wave x_loc = $"x_loc"
 	wave y_loc = $"y_loc"
 	// Consider how to use SortColumn operate to make it work better
 	variable numpeaks = DimSize(x_loc,0)
 	variable i
 	for (i=0; i<numpeaks ; i++)
-		if(x_loc(i)<10 || x_loc(i)>140 || y_loc(i)<10 || y_loc(i)>140)
+		if(x_loc(i)<17 || x_loc(i)>135 || y_loc(i)<20 || y_loc(i)>135)
 			deletepoints i, 1, x_loc
 			deletepoints i, 1, y_loc
 			i = i -1;
@@ -103,7 +124,7 @@ function JDDCPeakPositions(average,startX,startY,threshold)
 	endfor
 	
 	//Typical gaussian fit and separation anlysis
-	Gaussianfit(average,x_loc,y_loc,14,1)
+	Gaussianfit(average_new,x_loc,y_loc,14,1)
 	wave x0 = $"x0"
 	wave y0 = $"y0"
 	separation(19,19,3,0,-90,10)
@@ -116,7 +137,7 @@ function JDDCPeakPositions(average,startX,startY,threshold)
 	printf "y precision is %g pm\n", y_prec 
 	
 	//Display results	
-	newimage average
+	newimage average_new
 	appendtograph/t y0 vs x0
 	modifygraph mode=2
 	modifygraph lsize=3
@@ -1803,54 +1824,5 @@ function IntegratedGaussianIntensity(image, size, intensity_map, visibility_map)
 		endfor	
 	endif
 	killwaves M_colors
-end
-
-function FrameDifference(st)
-	wave st
-	
-	make/o/n=(DimSize(st, 0), DimSize(st, 1)) dt
-	make/o/n=(DimSize(st, 2)) diff
-	
-	variable j
-	for(j=1; j<DimSize(st, 2); j+=1)
-		dt  = st[p][q][j] - st[p][q][j-1]
-		dt = 1/dt
-		wavestats/q dt
-		diff[j-1] = V_numINFs
-	endfor
-	
-	diff /= (DimSize(st, 0)*DimSize(st,1))
-	Killwaves dt
-end
-
-function DeleteDupes(st, thresh)
-	wave st
-	variable thresh
-	
-	Duplicate/O st, dupe_del
-	make/o/n=(DimSize(st, 0), DimSize(st, 1)) dt
-	variable diff
-	
-	variable i=1, j=0
-	do
-		// printf "Working on image %d\r", i
-		dt = dupe_del[p][q][i] - dupe_del[p][q][i-1]
-		dt = 1/dt
-		wavestats/q dt
-		diff = V_numINFs / (DimSize(st, 0)*DimSize(st, 1))
-		
-		if(diff >= thresh)
-//			Imagetransform/O/P=(i) removeZplane dupe_del
-			Deletepoints/M=2 i, 1, dupe_del
-			j+=1
-			printf "Deleted image %d\r" i
-		else
-			i+=1
-		endif	
-	while(i<DimSize(dupe_del, 2))
-	
-	printf "Removed %d duplicate frames.\r", j
-
-	Killwaves dt
 end
 

@@ -1,5 +1,5 @@
 #pragma rtGlobals=1		// Use modern global access method.
-//#include "Kirkland Program Input Generators"
+
 
 // functions to generate a set of condor inputs for autostem and autoconfocal:
 // take a full MXN output image and break it up into parts to be 
@@ -16,6 +16,7 @@
 // 10-02-13 updated condor cmd file for current (2013) version of Condor.  Changed Image_size
 //               to Requested_memory, and upped it by 50% to prevent jobs from being kicked 
 //               off nodes for requesting too little memory.
+// 06-30-17 adapted to choose version between c and cpp cz
 
 function MakeControlWaves()
 	
@@ -27,10 +28,12 @@ function MakeControlWaves()
 	Make/O/N=3 stem_p
 	Make/T/O/N=3 stem_p_labels = {"kV", "condenser inner angle", "condenser outer angle"}
 	stem_p = {200.0, 0.0, 17.5}
-	Make/O/N=(12, 2) aber, aber_input, aber_default
+	Make/O/N=(12, 2) aber, aber_input, aber_default, aber_titan
 	Make/O/T/N=(12, 4) aber_text
-	aber_default[][0] = {0, 0, 22.56, 22.08, 0.1198, 0.9018, 0.04964, 28.43, 11.84, 8.456, 0.622, 2.811}
-	aber_default[][1] = {0, 0, -20.1, -7.5, 0, -170.1, 20.9, -120.6, 153.8, 76.1, 0, -125.5} 
+	aber_titan[][0] = {0, 0, 22.56, 22.08, 0.1198, 0.9018, 0.04964, 28.43, 11.84, 8.456, 0.622, 2.811}
+	aber_titan[][1] = {0, 0, -20.1, -7.5, 0, -170.1, 20.9, -120.6, 153.8, 76.1, 0, -125.5} 
+	//aber_default[][0] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	//aber_default[][1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} 
 	aber_input = aber_default
 	aber = aber_default
 	aber_text[][0] = {"C1", "A1", "A2", "B2", "C3", "A3", "S3", "A4", "D4", "B4", "C5", "A5"}
@@ -46,8 +49,10 @@ function MakeControlWaves()
 	aber_selwave[][1] = 2
 	aber_selwave[][2] = 2
 	aber_selwave[][3] = 0
-	Make/O/N=9 sim_p
-	Make/O/T/N=9 sim_p_labels = {"transmission nx", "transmission ny", "probe nx", "probe ny", "slice thickness", "temperature", "# of phonons", "source size", "memory"}
+	Make/O/N=14 sim_p
+	Make/O/N=4 detector_p	// used for detector sensitivity map, consider change to other name later, cz
+	detector_p = {0.0, 0.0, 0.0, 0.0}
+	Make/O/T/N=11 sim_p_labels = {"transmission nx", "transmission ny", "probe nx", "probe ny", "slice thickness", "temperature", "# of phonons", "source size", "memory","tiltx","tilty"}
 	Make/O/T/N=1 detect_name = {"detector names"}
 	make/O/N=(1,2) detect_p
 	Make/O/N=1 thick_p
@@ -55,8 +60,9 @@ function MakeControlWaves()
 	make/O/N=9 imageout_p
 	Make/O/T/N=9 imageout_p_labels = {"xi", "xf", "yi", "yf", "nx", "ny", "# of chunks in x", "# of chunks in y", "thickness level y/n"}
 	make/O/T/N=4 names
+	make/O/T/N=1 sensmap
 	make/O/T/N=4 filename_labels = {"model filename", "output basename", "stem cmd comment", "model file path"}
-	make/O/T/N=4 sim_paths = { "/home/voyles/bin/autostem", "voyles@engr.wisc.edu", "/home/czhang376/bin/autoslice/autostem", "/home/czhang376/AutosliceJobs/"}
+	make/O/T/N=4 sim_paths = { "/home/voyles/bin/autostem", "voyles@engr.wisc.edu", "/filespace/people/v/voyles/bin/autostem", "/filespace/people/v/voyles/simulations/working/"}
 	make/O/T/N=4 sim_paths_labels = {"cluster executable", "email", "condor executable", "condor working directory"}
 	
 	// Make default detector waves.
@@ -93,6 +99,7 @@ end
 function StemChop(target, program)
 	variable target  // 1 = cluster, 2 = condor
 	string program
+	variable version // 1 for c, 2 for c++
 
 	NewPath/Q/O/M="Chose an output directory" this_path
 	Pathinfo this_path
@@ -107,14 +114,16 @@ function StemChop(target, program)
 	wave thick_p = $"root:Packages:stem_chop:thick_p"
 	wave imageout_p = $"root:Packages:stem_chop:imageout_p"
 	wave/T sim_paths = $"root:Packages:stem_chop:sim_paths"
-	outnum = StemChopInputsandReassemble(program, S_path, names[1],  names[0], stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p)
+	wave detector_p = $"root:Packages:stem_chop:detector_p"
+	wave/T sensmap = $"root:Packages:stem_chop:sensmap"
+	outnum = StemChopInputsandReassemble(program, S_path, names[1],  names[0], stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, version, detector_p, sensmap[0])
 
 	if(!outnum)
 		printf "Error writing the input or reassembly file.  Exiting.\r"
 		return 0
 	endif
-	StemChopCmd(target, sim_paths, S_path, names[1], names[2], sim_p[8], outnum)
-	StemChopDescription(program, S_path, names, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, outnum)
+	StemChopCmd(target, sim_paths, S_path, names[1], names[2], sim_p[8], outnum, version)
+	StemChopDescription(program, S_path, names, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, outnum, version)
 	SaveControlWaves(S_path)
 
 end
@@ -138,7 +147,7 @@ function SaveControlWaves(directory)
 	
 end
 
-function StemChopDescription(program, directory, names, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, outnum)
+function StemChopDescription(program, directory, names, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, outnum, version)
 	string program, directory
 	wave/T names
 	wave stem_p, aber, sim_p, detect_p
@@ -146,6 +155,7 @@ function StemChopDescription(program, directory, names, stem_p, aber, sim_p, det
 	wave imageout_p
 	wave thick_p
 	variable outnum
+	variable version
 	
 	variable f
 	string desc_name
@@ -180,6 +190,8 @@ function StemChopDescription(program, directory, names, stem_p, aber, sim_p, det
 		fprintf f, "No phonon disorder added.\r\n"
 	endif
 	fprintf f, "Source size = %g A.\r\n", sim_p[7]
+	fprintf f, "Sample x tilt = %g mrad.\r\n", sim_p[9]
+	fprintf f, "Sample y tilt = %g mrad.\r\n", sim_p[10]
 	fprintf f, "Expected memory use = %g MB.\r\n\r\n", sim_p[8]
 	
 	fprintf f, "Output image parameters:\r\n"
@@ -200,10 +212,10 @@ function StemChopDescription(program, directory, names, stem_p, aber, sim_p, det
 	fprintf f, "This results in %d total subimages.\r\n\r\n", outnum
 	
 	fprintf f, "Detector parameters:\r\n"
-	variable ndetect = dimsize(detect_name,0)
+	variable ndetect = numpnts(detect_name)
 	variable i
 	for(i=0; i<ndetect; i+=1)
-		fprintf f, "Detector %s extends from %g to %g mrad.\r\n ", detect_name[i][0], detect_p[i][0], detect_p[i][1]
+		fprintf f, "Detector %s extends from %g to %g mrad.\r\n ", detect_name[i], detect_p[i][0], detect_p[i][1]
 //		if(!cmpstr(program, "autostem"))
 //			fprintf f, "mrad.\r\n"
 //		else
@@ -218,13 +230,14 @@ end
 
 // image_p wave, N points: xi, xf, yi, yf, nx, ny, ncx, ncy
 
-function StemChopInputsAndReassemble(program, directory, basename, modelname, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p)
+function StemChopInputsAndReassemble(program, directory, basename, modelname, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, version, detector_p, sensmap)
 	string program
-	string directory, basename, modelname
-	wave stem_p, aber, sim_p, detect_p
+	string directory, basename, modelname, sensmap
+	wave stem_p, aber, sim_p, detect_p, detector_p
 	wave/t detect_name
 	wave imageout_p
 	wave thick_p
+	variable version
 	
 	variable xi = imageout_p[0]
 	variable xf = imageout_p[1]
@@ -241,6 +254,11 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 	string imname
 
 	FUNCREF ProtoOutput outfunc = OneAutostemImageOut
+	
+	if(detector_p[3]&&version==2)
+		printf "Detector sensitivity map is not supported for c++ version yet\r."
+		return 0
+	endif
 
 	if(nchunksx > nx || nchunksy > ny)
 		printf "Don't be stupid!  Have at least one pixel per simulation.\r"
@@ -274,7 +292,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 		fprintf f, "npy = DimSize(gfx_read, 1)\r"
 	endif		
 
-	variable ndetect = dimsize(detect_name,0)
+	variable ndetect = numpnts(detect_name)
 	variable nthick = numpnts(thick_p)+1
 	if(!thick_yn)
 		nthick = 0
@@ -298,7 +316,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 					pname[nt] = onen
 					fprintf f, "Make/O/N=(npx, npy) %s\r",  onen
 				endif
-				sprintf onen, "%s_%s_t%d", basename, detect_name[nd][0], nt+1
+				sprintf onen, "%s_%s_t%d", basename, detect_name[nd], nt+1
 				wname[nw] = onen
 				fprintf f, "Make/O/N=(%d, %d) %s\r", nx, ny, wname[nw]
 				fprintf f, "SetScale/I x %f, %f, \"\", %s\r", xi, xf, wname[nw]
@@ -311,7 +329,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 				pname[0] = onen
 				fprintf f, "Make/O/N=(npx, npy) %s\r",  onen
 			endif
-			sprintf onen, "%s_%s", basename, detect_name[nd][0]
+			sprintf onen, "%s_%s", basename, detect_name[nd]
 			wname[nw] = onen
 			fprintf f, "Make/O/N=(%d, %d) %s\r", nx, ny, wname[nw]
 			fprintf f, "SetScale/I x %f, %f, \"\", %s\r", xi, xf, wname[nw]
@@ -354,7 +372,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 			chop_image_p[1] = chop_image_p[0] + xstep*(npx-1)
 			chop_image_p[2] = yi + ystep*jj*npy
 			chop_image_p[3] = chop_image_p[2] + ystep*(npy-1)
-			outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum)
+			outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum, version, detector_p, sensmap)
 			nw = 0
 			for(nd=0; nd<ndetect; nd+=1)
 				if(thick_yn)
@@ -394,7 +412,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 		for(jj=0; jj<nchunksy; jj+=1)
 			chop_image_p[2] = yi + ystep*jj*npy
 			chop_image_p[3] = chop_image_p[2] + ystep*(npy-1)
-			outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum)
+			outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum, version, detector_p, sensmap)
 			nw = 0 
 			for(nd=0; nd<ndetect; nd+=1)
 				if(thick_yn)
@@ -434,7 +452,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 		for(ii=0; ii<nchunksx; ii+=1)
 			chop_image_p[0] = xi + xstep*ii*npx
 			chop_image_p[1] = chop_image_p[0] + xstep*(npx-1)
-			outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum)
+			outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum, version, detector_p, sensmap)
 			nw=0
 			for(nd=0; nd<ndetect; nd+=1)
 				if(thick_yn)
@@ -473,7 +491,7 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 		chop_image_p[1] = chop_image_p[0] + xstep*(npx_leftover-1)
 		chop_image_p[2] = yi + ystep*nchunksy*npy
 		chop_image_p[3] = chop_image_p[2] + ystep*(npy_leftover-1)
-		outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum)
+		outfunc(directory, basename, modelname, stem_p, aber, sim_p, chop_image_p, detect_p, detect_name, thick_out_p, outnum, version, detector_p, sensmap)
 		nw=0
 		for(nd=0; nd<ndetect; nd+=1)
 			if(thick_yn)
@@ -524,11 +542,11 @@ function StemChopInputsAndReassemble(program, directory, basename, modelname, st
 end
 
 
-function StemChopCmd(target, sim_paths, directory, basename, comment, size, outnum)
+function StemChopCmd(target, sim_paths, directory, basename, comment, size, outnum, version)
 	variable target  // 1 for cluster, 2 for condor
 	wave/t sim_paths 
 	string directory, basename, comment
-	variable outnum, size
+	variable outnum, version, size
 	
 	variable f, g, nim
 	string chopname
@@ -587,7 +605,7 @@ function StemChopCmd(target, sim_paths, directory, basename, comment, size, outn
 		fprintf f, "\n"
 	
 		fprintf f, "#Job description\n"
-		fprintf f, "Executable = %s\n", sim_paths[2]
+		fprintf f, "Executable = %s\n", sim_paths[2]		// executable path
 		fprintf f, "Request_memory = %d \n", 1.5*size
 		fprintf f, "\n"
 		
@@ -595,7 +613,7 @@ function StemChopCmd(target, sim_paths, directory, basename, comment, size, outn
 		variable i = ItemsInList(directory, ":")
 		directory = StringFromList((i-1), directory, ":")
 		sprintf s, "%s%s", sim_paths[3], directory
-		fprintf f, "Initialdir = %s\n", s
+		fprintf f, "Initialdir = %s\n", s		// working directory
 		sprintf s, "%s_im$(Process).input", basename
 		fprintf f, "Input = %s\n", s
 		sprintf s, "%s_im$(Process).out", basename

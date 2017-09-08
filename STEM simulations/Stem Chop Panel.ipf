@@ -1,10 +1,11 @@
 #pragma rtGlobals=1		// Use modern global access method.
-//#include "Stem Chop"
+
 
 // fixed SetPhonon bug 02-07-10
 // added configurations for exectuable files and email addresses 03-09-10 pmv
 // 01-03-11 added ability to use autostem's ability to generate output as a function of thickness from a single calculation
 // 01-09-11 added support for autopacbed program
+// 06-30-17 adapted to choose version between c and cpp cz
 
 Menu "Macros"
 		"STEM Chop", stem_chop_panel()
@@ -23,7 +24,7 @@ function stem_chop_panel() : Panel
 	DoWindow/C StemChopWin
 	//ShowTools
 	TabControl t,pos={4,4},size={604,423},proc=SwitchTabs
-	TabControl t,tabLabel(0)="Microscope"
+	TabControl t,tabLabel(0)="Microscope", value = 0
 	TabControl t,tabLabel(1)="Simulation",tabLabel(2)="Output Image"
 	TabControl t,tabLabel(3)="Detectors",tabLabel(4)="Thickness"
 	TabControl t,tabLabel(5)="Output Files",value= 0
@@ -61,30 +62,79 @@ function SwitchTabs(name, tab)
 	case 0:
 		tabstr = "mic"
 		MicParamLabels()
+		PopupMenu program_ver disable = 1	// don't have an elegent way to hide control in other tab, cz
+		CheckBox detectsensYN disable = 1
+		SetVariable detectorcenterx disable = 1
+		SetVariable detectorcentery disable = 1
+		SetVariable detectordist disable = 1
+		SetVariable setrepx disable = 1
+		SetVariable setrepy disable = 1
+		SetVariable setrepz disable = 1
 		break
+		
 	case 1:
 		tabstr = "sim"
 		SimParamLabels()
+		PopupMenu program_ver disable = 0
+		CheckBox detectsensYN disable = 1
+		SetVariable detectorcenterx disable = 1
+		SetVariable detectorcentery disable = 1
+		SetVariable detectordist disable = 1
+		SetVariable setrepx disable = 0
+		SetVariable setrepy disable = 0
+		SetVariable setrepz disable = 0
 		break
-
+		
 	case 2:
 		tabstr = "ima"
 		ImagParamLabels()
+		PopupMenu program_ver disable = 1
+		CheckBox detectsensYN disable = 1
+		SetVariable detectorcenterx disable = 1
+		SetVariable detectorcentery disable = 1
+		SetVariable detectordist disable = 1
+		SetVariable setrepx disable = 1
+		SetVariable setrepy disable = 1
+		SetVariable setrepz disable = 1
 		break
 
 	case 3:
 		tabstr = "det"
 		DetectLabels()
+		PopupMenu program_ver disable = 1
+		CheckBox detectsensYN disable = 0
+		SetVariable detectorcenterx disable = 0
+		SetVariable detectorcentery disable = 0
+		SetVariable detectordist disable = 0
+		SetVariable setrepx disable = 1
+		SetVariable setrepy disable = 1
+		SetVariable setrepz disable = 1
 		break
 
 	case 4:
 		tabstr = "thi"
 		ThicknessLabels()
+		PopupMenu program_ver disable = 1
+		CheckBox detectsensYN disable = 1
+		SetVariable detectorcenterx disable = 1
+		SetVariable detectorcentery disable = 1
+		SetVariable detectordist disable = 1
+		SetVariable setrepx disable = 1
+		SetVariable setrepy disable = 1
+		SetVariable setrepz disable = 1
 		break
 
 	case 5:
 		tabstr = "ino"
 		InoFilesLabels()
+		PopupMenu program_ver disable = 1
+		CheckBox detectsensYN disable = 1
+		SetVariable detectorcenterx disable = 1
+		SetVariable detectorcentery disable = 1
+		SetVariable detectordist disable = 1
+		SetVariable setrepx disable = 1
+		SetVariable setrepy disable = 1
+		SetVariable setrepz disable = 1
 		break
 	
 	default:
@@ -119,6 +169,7 @@ function SwitchTabs(name, tab)
 	
 end
 
+// Trigger the whole input generation after button clicked
 
 Function PanelGenerateInputs(ctrlName) : ButtonControl
 	String ctrlName
@@ -126,6 +177,7 @@ Function PanelGenerateInputs(ctrlName) : ButtonControl
 	ReadDetectors()
 	ReadThickness()
 	SetPhonons()
+	SetDetectorSens()
 	SetAberrations()
 	wave sim_p = $"root:Packages:stem_chop:sim_p"
 	NVAR mem = $"root:Packages:stem_chop:mem_estimate"
@@ -144,6 +196,9 @@ Function PanelGenerateInputs(ctrlName) : ButtonControl
 	case 2:
 		StemChopPanel("autopacbed")
 		break
+	case 3:
+		StemChopPanel("autopacbed")
+		break	//case 3 for autocbed, share the same procedure as autostem but use autocbed as executable
 	default:
 		printf "How did you get here?  Error in PanelGenerateInputs.\r"
 		return 0
@@ -154,7 +209,7 @@ End
 function StemChopPanel(program)
 	string program
 	
-	variable outnum, target
+	variable outnum, target, version
 	
 	wave/T names = $"root:Packages:stem_chop:names"
 	wave stem_p = $"root:Packages:stem_chop:stem_p"
@@ -165,15 +220,19 @@ function StemChopPanel(program)
 	wave imageout_p = $"root:Packages:stem_chop:imageout_p"
 	wave/t sim_paths = $"root:Packages:stem_chop:sim_paths"
 	wave thick_p = $"root:Packages:stem_chop:thick_p"
-	outnum = StemChopInputsandReassemble(program, names[3], names[1],  names[0], stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p)
+		wave detector_p = $"root:Packages:stem_chop:detector_p"
+	wave/T sensmap = $"root:Packages:stem_chop:sensmap"
+	version = GetVersion()
+	outnum = StemChopInputsandReassemble(program, names[3], names[1],  names[0], stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, version, detector_p, sensmap[0])
 
 	if(!outnum)
 		printf "Error writing the input or reassembly file.  Exiting.\r"
 		return 0
 	endif
 	target = GetTarget()
-	StemChopCmd(target, sim_paths, names[3], names[1], names[2], sim_p[8], outnum)
-	StemChopDescription(program, names[3], names, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, outnum)
+	
+	StemChopCmd(target, sim_paths, names[3], names[1], names[2], sim_p[8], outnum, version)
+	StemChopDescription(program, names[3], names, stem_p, aber, sim_p, detect_p, detect_name, imageout_p, thick_p, outnum, version)
 	SaveControlWaves(names[3])
 
 end
@@ -182,6 +241,7 @@ function sim_param() : Panel
 	PauseUpdate; Silent 1		// building window...
 	//NewPanel /W=(513.75,64.25,1125,488) as "Simulation Parameters"
 	SetDrawLayer UserBack
+	
 	SetVariable sim_tran_nx,pos={22,61},size={110,19},title="X pixels: ",fSize=12
 	SetVariable sim_tran_nx,limits={2,Inf,1},value= root:Packages:stem_chop:sim_p[0]
 	SetVariable sim_tran_ny,pos={22,86},size={110,19},title="Y pixels",fSize=12
@@ -198,16 +258,44 @@ function sim_param() : Panel
 	SetVariable sim_phon_n,pos={232,111},size={180,19},title="phonon configurations:"
 	SetVariable sim_phon_n,fSize=12
 	SetVariable sim_phon_n,limits={1,Inf,1},value= root:Packages:stem_chop:sim_p[6]
-	SetVariable sim_source,pos={232,148},size={125,19},title="source size",fSize=12
+	SetVariable sim_source,pos={232,138},size={125,19},title="source size",fSize=12
 	SetVariable sim_source,limits={0,Inf,1},value= root:Packages:stem_chop:sim_p[7]
+	
+	SetVariable sim_tilt_x,pos={450,61},size={100,19},title="X tilt: "
+	SetVariable sim_tilt_x,fSize=12
+	SetVariable sim_tilt_x,limits={0,Inf,0.1},value= root:Packages:stem_chop:sim_p[9]
+	
+	SetVariable sim_tilt_y,pos={450,86},size={100,19},title="Y tilt: "
+	SetVariable sim_tilt_y,fSize=12
+	SetVariable sim_tilt_y,limits={0,Inf,0.1},value=root:Packages:stem_chop:sim_p[10]
+	
+	//was trying to use rep_x as name but it seems that rep_ is not allowed, the window would be invisiable
+	SetVariable setrepx pos={450,135},size={120,19},frame=1,font="Helvetica", value=root:Packages:stem_chop:sim_p[11]
+	SetVariable setrepy title = "X Replicates", limits={1,Inf,1}
+	
+	SetVariable setrepy pos={450,160},size={120,19},frame=1,font="Helvetica", value=root:Packages:stem_chop:sim_p[12]
+	SetVariable setrepy title = "Y Replicates", limits={1,Inf,1}
+	
+	SetVariable setrepz pos={450,185},size={120,19},frame=1,font="Helvetica", value=root:Packages:stem_chop:sim_p[13]
+	SetVariable setrepz title = "Z Replicates", limits={1,Inf,1}
+	
 	CheckBox sim_phononYN,pos={232,61},size={105,16},title="Add phonons?",fSize=12
 	CheckBox sim_phononYN,value= 0
-	PopupMenu sim_chop_target,pos={232,203},size={227,24},title="chop target"
+	
+	PopupMenu sim_chop_target,pos={232,193},size={227,24},title="chop target"
 	PopupMenu sim_chop_target,fSize=12
-	PopupMenu sim_chop_target,mode=2,popvalue="cluster",value= #"\"cluster;condor\""
-	PopupMenu sim_program,pos={232,175},size={227,24},title="simulation program"
+	PopupMenu sim_chop_target,mode=1,value= #"\"cluster;condor\""
+	
+	PopupMenu sim_program,pos={232,165},size={227,24},title="simulation program"
 	PopupMenu sim_program,fSize=12
-	PopupMenu sim_program,mode=2,popvalue="autostem",value= #"\"autostem;autopacbed\""
+	PopupMenu sim_program,mode=1,value= #"\"autostem;autopacbed;autocbed\""
+	
+	PopupMenu program_ver,pos={232,219},size={227,24},title="multislice version"
+	PopupMenu program_ver,fSize=12
+	PopupMenu program_ver,mode=1,value= #"\"c;c++\""
+	
+
+	
 	SetVariable sim_cluster_exec,pos={22,259},size={400,16},title="executable:"
 	SetVariable sim_cluster_exec,value= root:Packages:stem_chop:sim_paths[0]
 	SetVariable sim_email,pos={22,283},size={200,16},title="email:"
@@ -232,12 +320,14 @@ function SimParamLabels()
 	SetDrawEnv fillpat= 0
 	DrawRect 227,32,430,135
 	DrawText 368,102,"K"
-	DrawText 363,165,"Å"
+	DrawText 363,155,"Å"
 	DrawText 180,220,"Å"
-	DrawRect 16,319,430,394
-	DrawRect 16,236,430,307
-	DrawText 22,256,"Cluster:"
+	DrawRect 16,325,430,394
+	DrawRect 16,242,430,307
+	DrawText 22,260,"Cluster:"
 	DrawText 22,342,"Condor:"
+	DrawText 450,51,"Sample Tilt(mrad):"
+	DrawText 450,130,"Model Replicates:"
 end	
 
 Function imag_param() : Panel
@@ -310,12 +400,18 @@ function ino_files() : Panel
 	Button ino_model,pos={285,96},size={100,20},proc=SelectModelFile,title="Select Model File"
 	SetVariable ino_basename,pos={17,39},size={250,19},title="Output basename"
 	SetVariable ino_basename,fSize=12,value= root:Packages:stem_chop:names[1]
+	
 	SetVariable ino_stem_cmt,pos={17,68},size={400,19},title="comment:",fSize=12
 	SetVariable ino_stem_cmt,value= root:Packages:stem_chop:names[2]
+	
 	SetVariable ino_modeldisp,pos={17,96},size={250,19},title="model file",fSize=12
 	SetVariable ino_modeldisp,value= root:Packages:stem_chop:names[0],noedit= 1
+	
 	SetVariable ino_pathdisp,pos={17,124},size={580,19},title="folder",fSize=12
 	SetVariable ino_pathdisp,value= root:Packages:stem_chop:names[3],noedit= 1
+	
+	SetVariable ino_sensmap,pos={17,152},size={580,19},title="Sensitivity map file:",fSize=12
+	SetVariable ino_sensmap,value= root:Packages:stem_chop:sensmap[0]
 End
 
 
@@ -331,7 +427,8 @@ Function TitanDefaultAberrations(ba) : ButtonControl
 	switch( ba.eventCode )
 		case 2: // mouse up
 			wave/t aber_text = $"root:Packages:stem_chop:aber_text"
-			wave aber_default = $"root:Packages:stem_chop:aber_default"
+			wave aber_default = $"root:Packages:stem_chop:aber_titan"
+			//wave aber_titan = $"root:Packages:stem_chop:aber_titan"
 			aber_text[][1,2] = num2str(aber_default[p][q-1])
 			break
 	endswitch
@@ -365,6 +462,14 @@ function GetTarget()
 	
 end
 
+// return value for simulation program version, 1 = C, 2 = C++
+
+function GetVersion()
+	ControlInfo/W=StemChopWin program_ver
+	return V_value
+	
+end
+
 Function SelectModelFile(ctrlName) : ButtonControl
 	String ctrlName
 	
@@ -388,31 +493,26 @@ Function SelectModelFile(ctrlName) : ButtonControl
 
 End
 
-function detect() : Panel
+function detect() : panel
 
 	string fol = GetDataFolder(1)
 	SetDataFolder root:Packages:stem_chop:
-	Make/O/T/N=(dimsize(detect_name,0), 6) detect_lb
-	Make/O/B/U/N=(dimsize(detect_name,0), 6) detect_sw
+	Make/O/T/N=(numpnts(detect_name), 3) detect_lb
+	Make/O/B/U/N=(numpnts(detect_name), 3) detect_sw
 	wave/t detect_name = $"detect_name"
 	wave detect_p = $"detect_p"
-	detect_lb[][0] = detect_name[p][0]
+	detect_lb[][0] = detect_name[p]
 	detect_lb[][1] = num2str(detect_p[p][0])
 	detect_lb[][2] = num2str(detect_p[p][1])
-	detect_lb[][3] = num2str(detect_p[p][2])
-	detect_lb[][4] = num2str(detect_p[p][3])
-	detect_lb[][5] = detect_name[p][1]
 	detect_sw = 2
 	
 	SetDimLabel 1, 0, 'detector name', detect_lb
 	SetDimlabel 1, 1, 'inner angle (mr)', detect_lb
 	SetDimLabel 1, 2, 'outer angle (mr)', detect_lb	
-	SetDimLabel 1, 3, 'center x', detect_lb
-	SetDimLabel 1, 4, 'center y', detect_lb
-	SetDimLabel 1, 5, 'file name', detect_lb
 
 	// draw the panel
-	PauseUpdate; Silent 1		// building window...
+	//PauseUpdate; 
+	//Silent 1		// building window...
 	//NewPanel /W=(605.25,68,1218.75,491.75) as "Detectors"
 	ListBox det_lb,pos={15,53},size={447,362}
 	ListBox det_lb,listWave=root:Packages:stem_chop:detect_lb
@@ -421,7 +521,18 @@ function detect() : Panel
 	Button det_removedet,pos={474,78},size={95,20},proc=RemoveDetector,title="Remove detector"
 	Button det_defaults,pos={474,114},size={80,20},proc=DefaultDetectors,title="Go to default:"
 	PopupMenu det_select_default,pos={474,149},size={116,21}
-	PopupMenu det_select_default,mode=3,popvalue=" Generic STEM",value= #"\"Titan STEM; Titan EFSTEM; Generic STEM\""
+	PopupMenu det_select_default,mode=3,value= #"\"Titan STEM; Titan EFSTEM; Generic STEM\""
+	CheckBox detectsensYN,pos={474,180},size={105,16},title=" Sensitivity?",fSize=12
+	CheckBox detectsensYN,value=0
+	SetVariable detectorcenterx,pos={474,205},size={100,19},title="CenterX: "
+	SetVariable detectorcenterx,fSize=12
+	SetVariable detectorcenterx,limits={0,Inf,0.1},value= root:Packages:stem_chop:detector_p[0]
+	SetVariable detectorcentery,pos={474,230},size={100,19},title="CenterY: "
+	SetVariable detectorcentery,fSize=12
+	SetVariable detectorcentery,limits={0,Inf,0.1},value= root:Packages:stem_chop:detector_p[1]
+	SetVariable detectordist,pos={474,255},size={100,19},title="Distance: "
+	SetVariable detectordist,fSize=12
+	SetVariable detectordist,limits={0,Inf,0.1},value= root:Packages:stem_chop:detector_p[2]
 
 	SetDataFolder fol
 
@@ -445,9 +556,6 @@ Function AddDetector(ctrlName) : ButtonControl
 	detect_lb[n][0] = "<name>"
 	detect_lb[n][1] = "0"
 	detect_lb[n][2] = "0"
-	detect_lb[n][3] = "0"
-	detect_lb[n][4] = "0"
-	detect_lb[n][5] = "<name>"
 	detect_sw[n][] = 2
 end
 
@@ -501,8 +609,6 @@ Function DefaultDetectors(ctrlName) : ButtonControl
 	detect_lb[][0] = name[p]
 	detect_lb[][1] = num2str(param[p][0])
 	detect_lb[][2] = num2str(param[p][1])
-	detect_lb[][3] = num2str(param[p][2])
-	detect_lb[][4] = num2str(param[p][3])
 	detect_sw = 2
 
 	SetDataFolder fol
@@ -517,15 +623,12 @@ function ReadDetectors()
 	SetDataFolder root:Packages:stem_chop:
 	
 	variable ndet = DimSize(detect_lb, 0)
-	Make/O/T/N=(ndet, 2) detect_name
+	Make/O/T/N=(ndet) detect_name
 	Make/O/N=(ndet, 2) detect_p
 	
-	detect_name[p][0] = detect_lb[p][0] //detector name
-	detect_p[][0] = str2num(detect_lb[p][1]) //inner angle
-	detect_p[][1] = str2num(detect_lb[p][2]) //outer angle
-	detect_p[][2] = str2num(detect_lb[p][3]) //center x
-	detect_p[][3] = str2num(detect_lb[p][4]) //center y
-	detect_name[p][1] = detect_lb[p][5] //detector sensmap name
+	detect_name = detect_lb[p][0]
+	detect_p[][0] = str2num(detect_lb[p][1])
+	detect_p[][1] = str2num(detect_lb[p][2])
 	
 	SetDataFolder fol
 end
@@ -639,6 +742,17 @@ function SetPhonons()
 	ControlInfo sim_phononYN
 	if(!V_value)	// no phonons
 		sim_p[5] = -1
+	endif
+end
+
+function SetDetectorSens()
+
+	wave detector_p = $"root:Packages:stem_chop:detector_p"
+	ControlInfo detectsensYN
+	if(V_value)
+		detector_p[3] = 1
+	else
+		detector_p[3] = 0
 	endif
 end
 
